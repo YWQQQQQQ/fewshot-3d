@@ -5,12 +5,12 @@ import h5py
 import numpy as np
 from torch.utils.data import Dataset
 from torchvision import transforms
-from transforms.Transforms import Translation, Rotation
 import utils
 import argparse
 from tqdm import tqdm
 import random
 import torch
+from transforms import Transforms3D
 
 
 class ModelNet40Loader(Dataset):
@@ -25,18 +25,20 @@ class ModelNet40Loader(Dataset):
 
         # Define transform methods
         if self.partition == 'train':
-            self.transform = transforms.Compose([Translation(),
-                                                 Rotation(),
-                                                 ToTensor()
+            self.transform = transforms.Compose([Transforms3D.List2Array(),
+                                                 Transforms3D.ToTensor(self.args),
+                                                 Transforms3D.Translation(self.args),
+                                                 Transforms3D.Rotation(self.args)
                                                  ])
         else:  # 'val' or 'test' ,
-            self.transform = transforms.Compose([ToTensor()
+            self.transform = transforms.Compose([Transforms3D.List2Array(),
+                                                 Transforms3D.ToTensor(self.args)
                                                  ])
 
         # load dataset
-        self.data = self.load_data(partition)
+        self.data = self.load_data()
 
-    def load_data(self, partition):
+    def load_data(self):
         # Check if dataset exists. If not, download
         utils.download()
 
@@ -47,7 +49,7 @@ class ModelNet40Loader(Dataset):
         # Read dataset
         all_data = [[] for c in range(self.num_classes)]
 
-        for h5_name in tqdm(glob.glob(os.path.join(DATA_DIR, 'modelnet40_ply_hdf5_2048', 'ply_data_%s*.h5' % partition))):
+        for h5_name in tqdm(glob.glob(os.path.join(DATA_DIR, 'modelnet40_ply_hdf5_2048', 'ply_data_%s*.h5' % self.partition))):
             f = h5py.File(h5_name)
             datas = f['data'][:].astype('float32')
             labels = f['label'][:].astype('int64').squeeze()
@@ -55,7 +57,6 @@ class ModelNet40Loader(Dataset):
 
             for data, label in zip(datas, labels):
                 all_data[label].append(data[:self.num_points, :])
-
         return all_data  # num_classes, num_object
 
     def get_task_batch(self,
@@ -68,23 +69,26 @@ class ModelNet40Loader(Dataset):
             random.seed(seed)
 
         # init task batch data
-        support_data, support_label, query_data, query_label = [], [], [], []
+        sp_data, sp_rel_label, sp_abs_label, qry_data, qry_rel_label, qry_abs_label = [], [], [], [], [], []
 
         for _ in range(num_ways * num_shots):
             data = np.zeros(shape=[num_tasks, self.num_points, 3],
                             dtype='float32')
             label = np.zeros(shape=[num_tasks],
                              dtype='float32')
-            support_data.append(data)
-            support_label.append(label)
+
+            sp_data.append(data)
+            sp_rel_label.append(label)
+            sp_abs_label.append(label)
 
         for _ in range(num_ways * num_queries):
             data = np.zeros(shape=[num_tasks, self.num_points, 3],
                             dtype='float32')
             label = np.zeros(shape=[num_tasks],
                              dtype='float32')
-            query_data.append(data)
-            query_label.append(label)
+            qry_data.append(data)
+            qry_rel_label.append(label)
+            qry_abs_label.append(label)
 
         # get full class list in dataset
         full_class_list = [i for i in range(40)]
@@ -102,39 +106,80 @@ class ModelNet40Loader(Dataset):
                 # load sample for support set
                 for i_idx in range(num_shots):
                     # set data
-                    support_data[i_idx + c_idx * num_shots][t_idx] = class_data_list[i_idx]
-                    support_label[i_idx + c_idx * num_shots][t_idx] = c_idx
+                    sp_data[i_idx + c_idx * num_shots][t_idx] = class_data_list[i_idx]
+                    sp_rel_label[i_idx + c_idx * num_shots][t_idx] = c_idx
+                    sp_abs_label[i_idx + c_idx * num_shots][t_idx] = task_class_list[c_idx]
 
                 # load sample for query set
                 for i_idx in range(num_queries):
-                    query_data[i_idx + c_idx * num_queries][t_idx] = class_data_list[num_shots + i_idx]
-                    query_label[i_idx + c_idx * num_queries][t_idx] = c_idx
+                    qry_data[i_idx + c_idx * num_queries][t_idx] = class_data_list[num_shots + i_idx]
+                    qry_rel_label[i_idx + c_idx * num_queries][t_idx] = c_idx
+                    qry_abs_label[i_idx + c_idx * num_shots][t_idx] = task_class_list[c_idx]
 
-            support_data = self.transform(support_data)
-            support_data = self.transform(support_data)
+        new_sp_data,sp_data = self.transform(sp_data)
+        new_qry_data, qry_data = self.transform(qry_data)
 
-            # convert to tensor (num_tasks x (num_ways * (num_supports + num_queries)) x ...)
-            support_data = torch.stack([data.float().to(self.args.device) for data in support_data], 1)
-            support_label = torch.stack([torch.from_numpy(label).float().to(self.args.device) for label in support_label],
-                                        1)
-            query_data = torch.stack([data.float().to(self.args.device) for data in query_data], 1)
-            query_label = torch.stack([torch.from_numpy(label).float().to(self.args.device) for label in query_label], 1)
+        sp_rel_label = torch.tensor(sp_rel_label).view(-1)
+        qry_rel_label = torch.tensor(qry_rel_label).view(-1)
 
-            return [support_data, support_label, query_data, query_label]
+        sp_abs_label = torch.tensor(sp_abs_label).view(-1)
+        qry_abs_label = torch.tensor(qry_abs_label).view(-1)
+
+        return [sp_data, new_sp_data, sp_abs_label, qry_data, new_qry_data, qry_abs_label]
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Point Cloud Classification with Few-shot Learning')
     parser.add_argument('--dataset_root', type=str, default='../')
     parser.add_argument('--num_points', type=int, default='1024')
+    parser.add_argument('--device', type=str, default='cuda')
+    parser.add_argument('--shift_range', type=float, default='0')
+    parser.add_argument('--angle_range', type=float, default='6.28')
     args = parser.parse_args()
 
-    dataset = ModelNet40Loader(args)
-    support_data, support_label, query_data, query_label = dataset.get_task_batch()
-    print(support_data.shape)
-    print(support_label.shape)
-    print(query_data.shape)
-    print(query_label.shape)
+    shape_name = []
+    with open('../dataset/modelnet40_ply_hdf5_2048/shape_names.txt', 'r') as f:
+        for i in range(40):
+            shape_name.append(f.readline())
 
-    #print(len(dataset.data))
-    #for data in dataset.data:
-    #    print(len(data))
+    dataset = ModelNet40Loader(args)
+    sp_data, new_sp_data, sp_abs_label, qry_data, new_qry_data, qry_abs_label = dataset.get_task_batch()
+    for i in range(5):
+        data = qry_data[i]
+        x = data[0,:]
+        y = data[1,:]
+        z = data[2,:]
+
+        import matplotlib.pyplot as plt
+
+        fig = plt.figure()
+        ax = fig.add_subplot(121, projection='3d')
+        ax.scatter(x.cpu(),  # x
+                   y.cpu(),  # y
+                   z.cpu(),  # z
+                   cmap='Blues',
+                   marker="o")
+
+        data = new_qry_data[i]
+        x = data[0, :]
+        y = data[1, :]
+        z = data[2, :]
+        plt.title(shape_name[int(sp_abs_label[i].item())])
+        plt.xlabel('x')
+        plt.ylabel('y')
+
+        ax = fig.add_subplot(122, projection='3d')
+        ax.scatter(x.cpu(),  # x
+                   y.cpu(),  # y
+                   z.cpu(),  # z
+                   cmap='Blues',
+                   marker="o")
+
+        plt.title(shape_name[int(sp_abs_label[i].item())])
+        plt.xlabel('x')
+        plt.ylabel('y')
+
+        plt.show()
+
+        #print(torch.sum((qry_data[i,:,0]-qry_data[i,:,1])**2))
+        #print(torch.sum((new_qry_data[i,:,0]-new_qry_data[i,:,1])**2))
+
