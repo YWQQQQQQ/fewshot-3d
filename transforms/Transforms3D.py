@@ -32,19 +32,19 @@ class Translation:
         self.device = args.device
 
     def __call__(self, pcs):
-        pc_size = pcs.size()  # batch size*(num_support+num_query), features, num_points
+        pc_size = pcs.size()  # batch size*(num_support+num_query), num_features, num_points
 
         # Translation matrix construction
-        trans_matrix = torch.eye(pc_size[1] + 1, dtype=torch.float32).to(self.device)
-        x_shift = (torch.rand(1) - 0.5) * self.shift_range
-        y_shift = (torch.rand(1) - 0.5) * self.shift_range
-        z_shift = (torch.rand(1) - 0.5) * self.shift_range
+        trans_matrix = torch.eye(pc_size[1] + 1, dtype=torch.float32).unsqueeze(0)\
+            .repeat(pc_size[0],1,1).to(self.device)  # batch size*(num_support+num_query), num_features, num_features
 
-        trans_matrix[0, 3] = x_shift
-        trans_matrix[1, 3] = y_shift
-        trans_matrix[2, 3] = z_shift
+        x_shift = (torch.rand(pc_size[0]) - 0.5) * self.shift_range
+        y_shift = (torch.rand(pc_size[0]) - 0.5) * self.shift_range
+        z_shift = (torch.rand(pc_size[0]) - 0.5) * self.shift_range
 
-        trans_matrix = trans_matrix.unsqueeze(0).repeat(pc_size[0], 1, 1)
+        trans_matrix[:, 0, 3] = x_shift
+        trans_matrix[:, 1, 3] = y_shift
+        trans_matrix[:, 2, 3] = z_shift
 
         # Add an extra one for input pcs
         extra_one = torch.ones((pc_size[0], 1, pc_size[2])).to(self.device)
@@ -68,35 +68,34 @@ class Rotation:
 
         # Rotation matrix construction
         # x rotation
-        x_rot_matrix = torch.eye(pc_size[1]).to(self.device)
-        x_theta = torch.rand(1) * self.angle_range
+        x_rot_matrix = torch.eye(pc_size[1]).unsqueeze(0).repeat(pc_size[0],1,1).to(self.device)
+        x_theta = torch.rand(pc_size[0]) * self.angle_range
 
-        x_rot_matrix[1, 1] = torch.cos(x_theta)
-        x_rot_matrix[1, 2] = torch.sin(x_theta)
-        x_rot_matrix[2, 1] = -torch.sin(x_theta)
-        x_rot_matrix[2, 2] = torch.cos(x_theta)
+        x_rot_matrix[:, 1, 1] = torch.cos(x_theta)
+        x_rot_matrix[:, 1, 2] = torch.sin(x_theta)
+        x_rot_matrix[:, 2, 1] = -torch.sin(x_theta)
+        x_rot_matrix[:, 2, 2] = torch.cos(x_theta)
 
         # y rotation
-        y_rot_matrix = torch.eye(pc_size[1]).to(self.device)
-        y_theta = torch.rand(1) * self.angle_range
+        y_rot_matrix = torch.eye(pc_size[1]).unsqueeze(0).repeat(pc_size[0],1,1).to(self.device)
+        y_theta = torch.rand(pc_size[0]) * self.angle_range
 
-        y_rot_matrix[0, 0] = torch.cos(y_theta)
-        y_rot_matrix[0, 2] = -torch.sin(y_theta)
-        y_rot_matrix[2, 0] = torch.sin(y_theta)
-        y_rot_matrix[2, 2] = torch.cos(y_theta)
+        y_rot_matrix[:, 0, 0] = torch.cos(y_theta)
+        y_rot_matrix[:, 0, 2] = -torch.sin(y_theta)
+        y_rot_matrix[:, 2, 0] = torch.sin(y_theta)
+        y_rot_matrix[:, 2, 2] = torch.cos(y_theta)
 
         # z rotation
-        z_rot_matrix = torch.eye(pc_size[1]).to(self.device)
-        z_theta = torch.rand(1) * self.angle_range
+        z_rot_matrix = torch.eye(pc_size[1]).unsqueeze(0).repeat(pc_size[0],1,1).to(self.device)
+        z_theta = torch.rand(pc_size[0]) * self.angle_range
 
-        z_rot_matrix[0, 0] = torch.cos(z_theta)
-        z_rot_matrix[0, 1] = torch.sin(z_theta)
-        z_rot_matrix[1, 0] = -torch.sin(z_theta)
-        z_rot_matrix[1, 1] = torch.cos(z_theta)
+        z_rot_matrix[:, 0, 0] = torch.cos(z_theta)
+        z_rot_matrix[:, 0, 1] = torch.sin(z_theta)
+        z_rot_matrix[:, 1, 0] = -torch.sin(z_theta)
+        z_rot_matrix[:, 1, 1] = torch.cos(z_theta)
 
         # Final rotation
-        rot_matrix = torch.mm(torch.mm(x_rot_matrix, y_rot_matrix), z_rot_matrix)
-        rot_matrix = rot_matrix.unsqueeze(0).repeat(pc_size[0], 1, 1)
+        rot_matrix = torch.bmm(torch.bmm(x_rot_matrix, y_rot_matrix), z_rot_matrix)
 
         new_pcs = torch.bmm(rot_matrix, pcs)
 

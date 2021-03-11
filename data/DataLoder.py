@@ -128,11 +128,12 @@ class ModelNet40Loader(Dataset):
         return [sp_data, new_sp_data, sp_abs_label, qry_data, new_qry_data, qry_abs_label]
 
 if __name__ == '__main__':
+    import matplotlib.pyplot as plt
     parser = argparse.ArgumentParser(description='Point Cloud Classification with Few-shot Learning')
     parser.add_argument('--dataset_root', type=str, default='../')
     parser.add_argument('--num_points', type=int, default='1024')
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--shift_range', type=float, default='0')
+    parser.add_argument('--shift_range', type=float, default='1')
     parser.add_argument('--angle_range', type=float, default='6.28')
     args = parser.parse_args()
 
@@ -143,42 +144,46 @@ if __name__ == '__main__':
 
     dataset = ModelNet40Loader(args)
     sp_data, new_sp_data, sp_abs_label, qry_data, new_qry_data, qry_abs_label = dataset.get_task_batch()
+    fig = plt.figure()
     for i in range(5):
         data = qry_data[i]
         x = data[0,:]
         y = data[1,:]
         z = data[2,:]
 
-        import matplotlib.pyplot as plt
-
-        fig = plt.figure()
-        ax = fig.add_subplot(121, projection='3d')
+        ax = fig.add_subplot(2,5,i+1, projection='3d')
         ax.scatter(x.cpu(),  # x
                    y.cpu(),  # y
                    z.cpu(),  # z
                    cmap='Blues',
                    marker="o")
+        ax.set_xlim(-1,1)
+        ax.set_ylim(-1, 1)
+        ax.set_zlim(-1, 1)
+        plt.title(shape_name[int(sp_abs_label[i].item())])
+        plt.xlabel('x')
+        plt.ylabel('y')
 
         data = new_qry_data[i]
         x = data[0, :]
         y = data[1, :]
         z = data[2, :]
-        plt.title(shape_name[int(sp_abs_label[i].item())])
-        plt.xlabel('x')
-        plt.ylabel('y')
 
-        ax = fig.add_subplot(122, projection='3d')
+        ax = fig.add_subplot(2,5,i+6, projection='3d')
         ax.scatter(x.cpu(),  # x
                    y.cpu(),  # y
                    z.cpu(),  # z
                    cmap='Blues',
                    marker="o")
+        ax.set_xlim(-1,1)
+        ax.set_ylim(-1, 1)
+        ax.set_zlim(-1, 1)
 
         plt.title(shape_name[int(sp_abs_label[i].item())])
         plt.xlabel('x')
         plt.ylabel('y')
 
-        plt.show()
+    plt.show()
 
         #print(torch.sum((qry_data[i,:,0]-qry_data[i,:,1])**2))
         #print(torch.sum((new_qry_data[i,:,0]-new_qry_data[i,:,1])**2))
