@@ -55,6 +55,42 @@ class Translation:
         return pcs[:, :-1, :]
 
 
+class Scaling:
+    def __init__(self, args):
+        self.max_scale = args.max_scale
+        self.min_scale = args.min_scale
+        #self.device = args.device
+
+    def __call__(self, pcs):
+        pc_size = pcs.size()  # batch size*(num_support+num_query), num_features, num_points
+
+        scale_vector = torch.rand(pc_size[0])*(self.max_scale-self.min_scale)+self.min_scale
+        scale_vector = scale_vector.unsqueeze(-1).unsqueeze(-1).repeat(1, pc_size[1], pc_size[2])
+
+        pcs = scale_vector*pcs
+        return pcs
+
+
+class Perturbation:
+    def __init__(self, args):
+        self.sigma = args.sigma
+        self.clip = args.clip
+        #self.device = args.device
+
+    def __call__(self, pcs):
+        pc_size = pcs.size()  # batch size*(num_support+num_query), num_features, num_points
+
+        clip_max = self.clip
+        clip_min = -1 * self.clip
+
+        jitter = torch.randn(pc_size)*self.sigma
+        jitter = (jitter > clip_min)*jitter  # clip at clip_min
+        jitter = (jitter < clip_max)*jitter  # clip at clip_max
+
+        pcs += jitter
+        return pcs
+
+
 class Rotation:
     def __init__(self, args):
         self.angle_range = args.angle_range
@@ -97,7 +133,7 @@ class Rotation:
         # Final rotation
         rot_matrix = torch.bmm(torch.bmm(x_rot_matrix, y_rot_matrix), z_rot_matrix)
 
-        new_pcs = torch.bmm(rot_matrix, pcs)
+        pcs = torch.bmm(rot_matrix, pcs)
 
         # print('theta:',z_theta)
         # print('matrix:',(z_rot_matrix))
@@ -106,7 +142,7 @@ class Rotation:
         # print('pcs1:',pcs[0,:,1])
         # print('newpcs1:',new_pcs[0,:,1])
 
-        return new_pcs, pcs
+        return pcs
 
 
 if __name__ == '__main__':

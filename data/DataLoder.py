@@ -28,6 +28,8 @@ class ModelNet40Loader(Dataset):
             self.transform = transforms.Compose([Transforms3D.List2Array(),
                                                  Transforms3D.ToTensor(self.args),
                                                  Transforms3D.Translation(self.args),
+                                                 Transforms3D.Scaling(self.args),
+                                                 Transforms3D.Perturbation(self.args),
                                                  Transforms3D.Rotation(self.args)
                                                  ])
         else:  # 'val' or 'test' ,
@@ -116,8 +118,8 @@ class ModelNet40Loader(Dataset):
                     qry_rel_label[i_idx + c_idx * num_queries][t_idx] = c_idx
                     qry_abs_label[i_idx + c_idx * num_shots][t_idx] = task_class_list[c_idx]
 
-        new_sp_data,sp_data = self.transform(sp_data)
-        new_qry_data, qry_data = self.transform(qry_data)
+        new_sp_data = self.transform(sp_data)
+        new_qry_data = self.transform(qry_data)
 
         sp_rel_label = torch.tensor(sp_rel_label).view(-1)
         qry_rel_label = torch.tensor(qry_rel_label).view(-1)
@@ -132,9 +134,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Point Cloud Classification with Few-shot Learning')
     parser.add_argument('--dataset_root', type=str, default='../')
     parser.add_argument('--num_points', type=int, default='1024')
-    parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--shift_range', type=float, default='1')
-    parser.add_argument('--angle_range', type=float, default='6.28')
+    parser.add_argument('--device', type=str, default='cpu')
+    parser.add_argument('--shift_range', type=float, default='0')
+    parser.add_argument('--angle_range', type=float, default='0')
+    parser.add_argument('--max_scale', type=float, default='1')
+    parser.add_argument('--min_scale', type=float, default='1')
+    parser.add_argument('--sigma', type=float, default='0.1')
+    parser.add_argument('--clip', type=float, default='0.2')
+
+
     args = parser.parse_args()
 
     shape_name = []
@@ -145,16 +153,16 @@ if __name__ == '__main__':
     dataset = ModelNet40Loader(args)
     sp_data, new_sp_data, sp_abs_label, qry_data, new_qry_data, qry_abs_label = dataset.get_task_batch()
     fig = plt.figure()
-    for i in range(5):
-        data = qry_data[i]
-        x = data[0,:]
-        y = data[1,:]
-        z = data[2,:]
+    for i in range(4):
+        data = qry_data[0][i]
+        x = data[:,0]
+        y = data[:,1]
+        z = data[:,2]
 
         ax = fig.add_subplot(2,5,i+1, projection='3d')
-        ax.scatter(x.cpu(),  # x
-                   y.cpu(),  # y
-                   z.cpu(),  # z
+        ax.scatter(x,  # x
+                   y,  # y
+                   z,  # z
                    cmap='Blues',
                    marker="o")
         ax.set_xlim(-1,1)
