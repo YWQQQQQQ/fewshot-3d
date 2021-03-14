@@ -19,7 +19,7 @@ def download(root):
         os.system('rm %s' % (zipfile))
 
 
-def dataset_2_fewshot_dataset(root, seed=0, test_size=0.2):
+def dataset_to_fewshot_dataset(root, seed=0, test_size=0.2):
     download(root)
 
     BASE_DIR = root
@@ -72,4 +72,4 @@ def dataset_2_fewshot_dataset(root, seed=0, test_size=0.2):
         test_hf.close()
 
 if __name__ == '__main__':
-    dataset_2_fewshot_dataset('./', 0)
+    dataset_to_fewshot_dataset('./', 0)

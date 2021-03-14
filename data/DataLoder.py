@@ -1,5 +1,4 @@
 import os
-import sys
 import glob
 import h5py
 import numpy as np
@@ -7,10 +6,9 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 import utils
 import argparse
-from tqdm import tqdm
 import random
 import torch
-from transforms import Transforms3D
+from data import Transforms3D
 
 
 class ModelNet40Loader(Dataset):
@@ -42,7 +40,7 @@ class ModelNet40Loader(Dataset):
 
     def load_data(self):
         # Check if dataset exists. If not, download
-        utils.dataset_2_fewshot_dataset(root=self.root, test_size=self.test_size)
+        utils.dataset_to_fewshot_dataset(root=self.root, test_size=self.test_size)
 
         # dataset path
         BASE_DIR = self.root
@@ -128,7 +126,8 @@ class ModelNet40Loader(Dataset):
         sp_abs_label = torch.tensor(sp_abs_label).view(-1)
         qry_abs_label = torch.tensor(qry_abs_label).view(-1)
 
-        return [sp_data, new_sp_data, sp_abs_label, qry_data, new_qry_data, qry_abs_label]
+        return [new_sp_data, sp_rel_label, sp_abs_label, new_qry_data, qry_rel_label, qry_abs_label]
+
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
