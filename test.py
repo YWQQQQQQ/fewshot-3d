@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-
+import random
 torch.random.manual_seed(1)
 x=torch.rand((2,3,5))
 
@@ -18,4 +18,3 @@ def knn(x, k):
     dis, idx = inverse_distance.topk(k=k, dim=-1)  # (batch_size, num_points, k)
     return idx
 
-print(knn(x,2))

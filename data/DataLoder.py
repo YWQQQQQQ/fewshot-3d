@@ -22,7 +22,7 @@ class ModelNet40Loader(Dataset):
         self.num_points = self.args.num_points # 1024, 2048
         self.root = self.args.dataset_root
         self.num_classes = 40
-
+        self.test_size = args.test_size
         # Define transform methods
         if self.partition == 'train':
             self.transform = transforms.Compose([Transforms3D.List2Array(),
@@ -38,11 +38,11 @@ class ModelNet40Loader(Dataset):
                                                  ])
 
         # load dataset
-        self.data = self.load_data()
+        self.data, self.selected_classes = self.load_data()
 
     def load_data(self):
         # Check if dataset exists. If not, download
-        utils.download()
+        utils.dataset_2_fewshot_dataset(root=self.root, test_size=self.test_size)
 
         # dataset path
         BASE_DIR = self.root
@@ -51,20 +51,24 @@ class ModelNet40Loader(Dataset):
         # Read dataset
         all_data = [[] for c in range(self.num_classes)]
 
-        for h5_name in tqdm(glob.glob(os.path.join(DATA_DIR, 'modelnet40_ply_hdf5_2048', 'ply_data_%s*.h5' % self.partition))):
-            f = h5py.File(h5_name)
+        for h5_name in glob.glob(os.path.join(DATA_DIR, 'modelnet_fewshot', '%s.h5' % self.partition)):
+            f = h5py.File(h5_name, 'r')
             datas = f['data'][:].astype('float32')
             labels = f['label'][:].astype('int64').squeeze()
             f.close()
 
             for data, label in zip(datas, labels):
                 all_data[label].append(data[:self.num_points, :])
-        return all_data  # num_classes, num_object
+        idx_classes = []
+        for i, data in enumerate(all_data):
+            if len(data) > 0:
+                idx_classes.append(i)
+        return all_data, idx_classes  # num_classes, num_object
 
     def get_task_batch(self,
-                       num_tasks=4,
+                       num_tasks=32,
                        num_ways=5,
-                       num_shots=1,
+                       num_shots=5,
                        num_queries=1,
                        seed=None):
         if seed is not None:
@@ -92,13 +96,10 @@ class ModelNet40Loader(Dataset):
             qry_rel_label.append(label)
             qry_abs_label.append(label)
 
-        # get full class list in dataset
-        full_class_list = [i for i in range(40)]
-
         # for each task
         for t_idx in range(num_tasks):
             # define task by sampling classes (num_ways)
-            task_class_list = random.sample(full_class_list, num_ways)
+            task_class_list = random.sample(self.selected_classes, num_ways)
 
             # for each sampled class in task
             for c_idx in range(num_ways):
@@ -116,10 +117,10 @@ class ModelNet40Loader(Dataset):
                 for i_idx in range(num_queries):
                     qry_data[i_idx + c_idx * num_queries][t_idx] = class_data_list[num_shots + i_idx]
                     qry_rel_label[i_idx + c_idx * num_queries][t_idx] = c_idx
-                    qry_abs_label[i_idx + c_idx * num_shots][t_idx] = task_class_list[c_idx]
+                    qry_abs_label[i_idx + c_idx * num_queries][t_idx] = task_class_list[c_idx]
 
-        sp_data = self.transform(sp_data)
-        qry_data = self.transform(qry_data)
+        new_sp_data = self.transform(sp_data)
+        new_qry_data = self.transform(qry_data)
 
         sp_rel_label = torch.tensor(sp_rel_label).view(-1)
         qry_rel_label = torch.tensor(qry_rel_label).view(-1)
@@ -127,10 +128,12 @@ class ModelNet40Loader(Dataset):
         sp_abs_label = torch.tensor(sp_abs_label).view(-1)
         qry_abs_label = torch.tensor(qry_abs_label).view(-1)
 
-        return [sp_data, sp_rel_label, sp_abs_label, qry_data, qry_rel_label, qry_abs_label]
+        return [sp_data, new_sp_data, sp_abs_label, qry_data, new_qry_data, qry_abs_label]
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
+    import time
+
     parser = argparse.ArgumentParser(description='Point Cloud Classification with Few-shot Learning')
     parser.add_argument('--dataset_root', type=str, default='../')
     parser.add_argument('--num_points', type=int, default='1024')
@@ -141,6 +144,7 @@ if __name__ == '__main__':
     parser.add_argument('--min_scale', type=float, default='0.5')
     parser.add_argument('--sigma', type=float, default='0.01')
     parser.add_argument('--clip', type=float, default='0.02')
+    parser.add_argument('--test_size', type=float, default='0.2')
 
 
     args = parser.parse_args()
@@ -151,7 +155,10 @@ if __name__ == '__main__':
             shape_name.append(f.readline())
 
     dataset = ModelNet40Loader(args)
+    time_start = time.time()
     sp_data, new_sp_data, sp_abs_label, qry_data, new_qry_data, qry_abs_label = dataset.get_task_batch()
+    time_end = time.time()
+    print(time_end-time_start)
     fig = plt.figure()
     for i in range(4):
         data = qry_data[0][i]
@@ -190,9 +197,8 @@ if __name__ == '__main__':
         plt.title(shape_name[int(sp_abs_label[i].item())])
         plt.xlabel('x')
         plt.ylabel('y')
-
+    print(time.time()-time_end)
     plt.show()
-
         #print(torch.sum((qry_data[i,:,0]-qry_data[i,:,1])**2))
         #print(torch.sum((new_qry_data[i,:,0]-new_qry_data[i,:,1])**2))
 
