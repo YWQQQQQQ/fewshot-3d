@@ -2,29 +2,17 @@ import numpy as np
 import torch
 
 
-class List2Array:
-    def __init__(self):
-        None
-
-    def __call__(self, pcs):
-        num_samples = len(pcs)
-        if len(pcs) > 0:
-            num_tasks, num_points, num_features = pcs[0].shape
-
-        array_pcs = np.zeros((num_samples*num_tasks, num_points, num_features),dtype='float32')
-        for i, pc in enumerate(pcs):
-            array_pcs[i*num_tasks:(i+1)*num_tasks, :, :] = pc
-        array_pcs = array_pcs.transpose(0, 2, 1)
-        return array_pcs
-
-
-class ToTensor:
+class List2Tensor:
     def __init__(self, args):
         self.device = args.device
 
     def __call__(self, pcs):
-        return torch.from_numpy(pcs).to(self.device)
-
+        pcs = torch.tensor(pcs).to(self.device)
+        test = pcs[2,3,:,:]
+        pc_size = pcs.size()  # num_tasks, num_samples, num_points, num_features
+        pcs = pcs.view(pc_size[0]*pc_size[1], pc_size[2], pc_size[3])
+        pcs = pcs.transpose(1,2)
+        return pcs
 
 class Translation:
     def __init__(self, args):
@@ -97,7 +85,6 @@ class Rotation:
         self.device = args.device
         if self.angle_range < 0 or self.angle_range > 2*np.pi:
             raise NotImplementedError('Angle range should be between 0 and 2*pi')
-
 
     def __call__(self, pcs):
         pc_size = pcs.size()  # num_tasks*num_samples, num_points, num_features

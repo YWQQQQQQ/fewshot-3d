@@ -5,6 +5,8 @@ import h5py
 import random
 import numpy as np
 from sklearn.model_selection import train_test_split
+import torch
+
 
 def download(root):
     BASE_DIR = root
@@ -70,6 +72,35 @@ def dataset_to_fewshot_dataset(root, seed=0, test_size=0.2):
 
         train_hf.close()
         test_hf.close()
+
+def label2edge(label):
+    # get size
+    num_samples = label.size(1)
+
+    # reshape
+    label_i = label.unsqueeze(-1).repeat(1, 1, num_samples)
+    label_j = label_i.transpose(1, 2)
+
+    # compute edge
+    edge = torch.eq(label_i, label_j).float()
+
+    # expand
+    edge = edge.unsqueeze(1)
+    edge = torch.cat([edge, 1 - edge], 1)
+    return edge
+
+
+def hit(self, logit, label):
+    pred = logit.max(1)[1]
+    hit = torch.eq(pred, label).float()
+    return hit
+
+
+def one_hot_encode(self, num_classes, class_idx):
+    return torch.eye(num_classes)[class_idx]
+
+def save_checkpoint(self, state, expr_folder, iter, model):
+    torch.save(state, str(expr_folder)+str(iter)+'_'+model+'.pth.tar')
 
 if __name__ == '__main__':
     dataset_to_fewshot_dataset('./', 0)
