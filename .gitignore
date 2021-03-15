@@ -1,2 +1,7 @@
 # ignore dataset
 dataset/*
+.idea/*
+_pycache_/*
+experiment/*
+
+!dataset/.gitkeep

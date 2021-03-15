@@ -90,17 +90,14 @@ def label2edge(label):
     return edge
 
 
-def hit(self, logit, label):
+def hit(logit, label):
     pred = logit.max(1)[1]
     hit = torch.eq(pred, label).float()
     return hit
 
 
-def one_hot_encode(self, num_classes, class_idx):
+def one_hot_encode(num_classes, class_idx):
     return torch.eye(num_classes)[class_idx]
-
-def save_checkpoint(self, state, expr_folder, iter, model):
-    torch.save(state, str(expr_folder)+str(iter)+'_'+model+'.pth.tar')
 
 if __name__ == '__main__':
     dataset_to_fewshot_dataset('./', 0)

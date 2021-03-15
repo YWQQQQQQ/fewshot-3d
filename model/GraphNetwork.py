@@ -36,7 +36,7 @@ class EdgeUpdateNetwork(nn.Module):
             self.add_module('conv_out', conv_out)
 
     def forward(self, node_feats, edge_feats):
-        # node_feats: num_tasks, num_supports+num_queries, num_features, num_points
+        # node_feats: num_tasks, num_queries, num_features, num_supports+1
         # compute abs(x_i, x_j)
         num_tasks, num_samples, num_feats = node_feats.size()
         x_i = node_feats.unsqueeze(2)
@@ -55,7 +55,7 @@ class EdgeUpdateNetwork(nn.Module):
         else:
             x_ij = self._modules['conv_out'](x_ij)
 
-        sim_val = F.sigmoid(x_ij)
+        sim_val = torch.sigmoid(x_ij)
         dsim_val = 1.0 - sim_val
 
         diag_mask = 1.0 - torch.eye(num_samples).unsqueeze(0).unsqueeze(0).repeat(num_tasks, 2, 1, 1).to(self.device)
@@ -154,9 +154,10 @@ class GraphNetwork(nn.Module):
         for l in range(self.num_layers):
             # (1) edge to node
             node_feats = self._modules['edge2node_net{}'.format(l+1)](node_feats, edge_feats)
-
+            print('node', node_feats.shape)
             # (2) node to edge
             edge_feats = self._modules['node2edge_net{}'.format(l+1)](node_feats, edge_feats)
+            print('edge', edge_feats.shape)
 
 
             edge_feat_list.append(edge_feats)

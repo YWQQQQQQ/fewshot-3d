@@ -17,12 +17,9 @@ def knn(x, k):
     return idx[:,:,1:]
 
 
-
-
-
-class Embedding(nn.Module):
+class EmbeddingNetwork(nn.Module):
     def __init__(self, args):
-        super(Embedding, self).__init__()
+        super(EmbeddingNetwork, self).__init__()
 
         self.k = args.k
         self.device = args.device

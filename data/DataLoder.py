@@ -77,22 +77,25 @@ class ModelNet40Loader(Dataset):
         for _ in range(self.num_tasks):
             data = np.zeros(shape=[num_supports, self.num_points, 3],
                             dtype='float32')
-            label = np.zeros(shape=[num_supports],
+            rel_label = np.zeros(shape=[num_supports],
                              dtype='float32')
-
+            abs_label = np.zeros(shape=[num_supports],
+                                 dtype='float32')
             sp_data.append(data)
-            sp_rel_label.append(label)
-            sp_abs_label.append(label)
+            sp_rel_label.append(rel_label)
+            sp_abs_label.append(abs_label)
 
         num_total_queries = self.num_ways * self.num_queries
         for _ in range(self.num_tasks):
             data = np.zeros(shape=[num_total_queries, self.num_points, 3],
                             dtype='float32')
-            label = np.zeros(shape=[num_total_queries],
+            rel_label = np.zeros(shape=[num_total_queries],
                              dtype='float32')
+            abs_label = np.zeros(shape=[num_total_queries],
+                                 dtype='float32')
             qry_data.append(data)
-            qry_rel_label.append(label)
-            qry_abs_label.append(label)
+            qry_rel_label.append(rel_label)
+            qry_abs_label.append(abs_label)
 
         # for each task
         for t_idx in range(self.num_tasks):
@@ -145,7 +148,7 @@ if __name__ == '__main__':
     parser.add_argument('--sigma', type=float, default='0.01')
     parser.add_argument('--clip', type=float, default='0.02')
     parser.add_argument('--test_size', type=float, default='0.2')
-    parser.add_argument('--num_ways', type=int, default='4')
+    parser.add_argument('--num_ways', type=int, default='5')
     parser.add_argument('--num_shots', type=int, default='1')
     parser.add_argument('--num_tasks', type=int, default='5')
     parser.add_argument('--num_queries', type=int, default='1')
@@ -159,20 +162,19 @@ if __name__ == '__main__':
             shape_name.append(f.readline())
 
     dataset = ModelNet40Loader(args)
-    sp_data, sp_label, _, qry_data, qry_label, _ = dataset.get_task_batch()
-    print(sp_data.shape)
-    print(sp_label.shape)
-    print(qry_data.shape)
-    print(qry_label.shape)
-    '''
-    time_start = time.time()
 
-    sp_data, new_sp_data, sp_abs_label, qry_data, new_qry_data, qry_abs_label = dataset.get_task_batch()
-    time_end = time.time()
-    print(time_end-time_start)
+
+    new_sp_data, sp_data, sp_abs_label, new_qry_data, qry_data, qry_abs_label = dataset.get_task_batch()
+    # print(new_sp_data.shape)
+    # print(sp_data.shape)
+    # print(sp_abs_label.shape)
+    # print(new_qry_data.shape)
+    # print(qry_data.shape)
+    # print(qry_abs_label.shape)
+
     fig = plt.figure()
-    for i in range(4):
-        data = qry_data[0][i]
+    for i in range(args.num_ways):
+        data = sp_data[3][i]
         x = data[:,0]
         y = data[:,1]
         z = data[:,2]
@@ -183,14 +185,14 @@ if __name__ == '__main__':
                    z,  # z
                    cmap='Blues',
                    marker="o")
-        ax.set_xlim(-1,1)
+        ax.set_xlim(-1, 1)
         ax.set_ylim(-1, 1)
         ax.set_zlim(-1, 1)
-        plt.title(shape_name[int(sp_abs_label[i].item())])
+        plt.title(shape_name[int(sp_abs_label[3][i].item())])
         plt.xlabel('x')
         plt.ylabel('y')
 
-        data = new_qry_data[i]
+        data = new_sp_data[15+i]
         x = data[0, :]
         y = data[1, :]
         z = data[2, :]
@@ -205,12 +207,50 @@ if __name__ == '__main__':
         ax.set_ylim(-1, 1)
         ax.set_zlim(-1, 1)
 
-        plt.title(shape_name[int(sp_abs_label[i].item())])
+        plt.title(shape_name[int(sp_abs_label[3][i].item())])
         plt.xlabel('x')
         plt.ylabel('y')
-    print(time.time()-time_end)
+    plt.show()
+    fig = plt.figure()
+
+    for i in range(args.num_ways):
+        data = qry_data[3][i]
+        x = data[:,0]
+        y = data[:,1]
+        z = data[:,2]
+
+        ax = fig.add_subplot(2,5,i+1, projection='3d')
+        ax.scatter(x,  # x
+                   y,  # y
+                   z,  # z
+                   cmap='Blues',
+                   marker="o")
+        ax.set_xlim(-1, 1)
+        ax.set_ylim(-1, 1)
+        ax.set_zlim(-1, 1)
+        plt.title(shape_name[int(qry_abs_label[3][i].item())])
+        plt.xlabel('x')
+        plt.ylabel('y')
+
+        data = new_qry_data[15+i]
+        x = data[0, :]
+        y = data[1, :]
+        z = data[2, :]
+
+        ax = fig.add_subplot(2,5,i+6, projection='3d')
+        ax.scatter(x.cpu(),  # x
+                   y.cpu(),  # y
+                   z.cpu(),  # z
+                   cmap='Blues',
+                   marker="o")
+        ax.set_xlim(-1,1)
+        ax.set_ylim(-1, 1)
+        ax.set_zlim(-1, 1)
+
+        plt.title(shape_name[int(qry_abs_label[3][i].item())])
+        plt.xlabel('x')
+        plt.ylabel('y')
     plt.show()
         #print(torch.sum((qry_data[i,:,0]-qry_data[i,:,1])**2))
         #print(torch.sum((new_qry_data[i,:,0]-new_qry_data[i,:,1])**2))
 
-'''
