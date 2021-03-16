@@ -192,7 +192,7 @@ class Model:
                                      ))
 
             # evaluation
-            '''
+
             if iter % self.val_interval == 0:
                 self.val_acc = self.evaluate()
 
@@ -202,53 +202,56 @@ class Model:
                             'emb': self.embeddingNet.state_dict(),
                             'gnn': self.graphNet.state_dict(),
                             'optim': self.optimizer.state_dict()}, os.path.join(self.expr_folder, 'model.pt'))
-            '''
+
     def evaluate(self):
         for iter in range(self.test_iters):
             sp_data, sp_label, _, qry_data, qry_label, _ = self.test_dataloader.get_task_batch()
 
             full_data = torch.cat([sp_data, qry_data], 0)
-            full_label = torch.cat([sp_label, qry_label], 1)
-            full_edge = label2edge(full_label)
-
-            init_edge = full_edge.clone()
-            init_edge[:, :, self.num_supports:, :] = 0.5
-            init_edge[:, :, :, self.num_supports:] = 0.5
-            for i in range(self.num_queries):
-                init_edge[:, 0, self.num_supports + i, self.num_supports + i] = 1.0
-                init_edge[:, 1, self.num_supports + i, self.num_supports + i] = 0.0
-
+            full_edge = label2edge(sp_label, qry_label).to(self.device)
 
             # set as train mode
             self.embeddingNet.eval()
             self.graphNet.eval()
 
+            # full data: num_tasks*num_sp + num_tasks*qry, num_emb_feat
+            # sp_data: num_tasks, num_sp, num_emb_feat
+            # qry_data: num_tasks*num_qry, 1, num_emb_feat
             full_data = self.embeddingNet(full_data)
             sp_data = full_data[:self.num_tasks * self.num_supports, :].view(self.num_tasks, self.num_supports,
                                                                              self.num_emb_feats)
-            qry_data = full_data[self.num_tasks * self.num_supports:, :].view(self.num_tasks, self.num_queries,
+            qry_data = full_data[self.num_tasks * self.num_supports:, :].view(self.num_tasks * self.num_queries, 1,
                                                                               self.num_emb_feats)
+
+            # sp_data: num_tasks*num_qry, num_sp, num_emb_feat
             sp_data = sp_data.unsqueeze(1).repeat(1, self.num_queries, 1, 1)
             sp_data = sp_data.view(self.num_tasks * self.num_queries, self.num_supports, self.num_emb_feats)
-            qry_data = qry_data.view(self.num_tasks * self.num_queries, 1, self.num_emb_feats)
-            input_node_feat = torch.cat([sp_data, qry_data], 1)  # (num_tasks x num_total_queries) x (num_support + 1) x featdim
-            input_edge_feat = 0.5 * torch.ones(self.num_tasks, 2, self.num_supports + 1, self.num_supports + 1).to(
-                self.device)  # num_tasks x 2 x (num_support + 1) x (num_support + 1)
 
-            input_edge_feat[:, :, :self.num_supports, :self.num_supports] = init_edge[:, :, :self.num_supports,
-                                                                            :self.num_supports]  # num_tasks x 2 x (num_support + 1) x (num_support + 1)
-            input_edge_feat = input_edge_feat.unsqueeze(1).repeat(1, self.num_queries, 1, 1, 1)
-            input_edge_feat = input_edge_feat.view(self.num_tasks * self.num_queries, 2, self.num_supports + 1,
-                                                   self.num_supports + 1)  # (num_tasks x num_queries) x 2 x (num_support + 1) x (num_support + 1)
+            # concat the sp and qry to a graph
+            # input_node_feat: num_tasks*num_qry, num_sp+1, num_emb_feat
+            # input_edge_feat: num_tasks*num_qry, 2, num_sp+1, num_sp+1
+            input_node_feat = torch.cat([sp_data, qry_data], 1)
 
+            # set the qry to others as 0.5 while keep qry to itself as 1
+            input_edge_feat = full_edge.clone()
+
+            # qry to others
+            input_edge_feat[:, :, -1, :-1] = 0.5
+            input_edge_feat[:, :, :-1, -1] = 0.5
+
+            # qry to itself
+            input_edge_feat[:, 0, -1, -1] = 1
+            input_edge_feat[:, 1, -1, -1] = 0
+
+            # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
             logit = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)[-1]
-            logit = logit.view(self.num_tasks, self.num_queries, 2, self.num_supports + 1, self.num_supports + 1)
-            logit = logit[:, :, 0, -1, :-1].squeeze()
 
-            val_pred = torch.bmm(logit, one_hot_encode(self.num_ways, sp_label.long()).to(self.device))
-            val_acc = torch.eq(torch.max(val_pred, -1)[1], qry_label.long()).float().mean()
+            # node
+            query_node_pred = logit[:, 0, -1, :-1].max(-1)[1]
+            query_node_acc = torch.sum(torch.eq(query_node_pred, qry_label.view(-1))).float() / (self.num_tasks*self.num_queries)
 
-            return val_acc
+
+            return query_node_acc
 
 
 
@@ -258,7 +261,7 @@ if __name__ == '__main__':
 
     # Fundamental setting
     parser.add_argument('--root', type=str, default='./')
-    parser.add_argument('--device', type=str, default='cpu')
+    parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--num_ways', type=int, default='5')
     parser.add_argument('--num_shots', type=int, default='1')
     parser.add_argument('--num_tasks', type=int, default='5')
@@ -266,7 +269,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=float, default='0')
     parser.add_argument('--train_iters', type=int, default='2000')
     parser.add_argument('--test_iters', type=int, default='10')
-    parser.add_argument('--val_interval', type=int, default='50')
+    parser.add_argument('--val_interval', type=int, default='10')
     parser.add_argument('--expr', type=str, default='experiment/')
     parser.add_argument('--ckpt', type=str, default=None)
 
@@ -279,22 +282,22 @@ if __name__ == '__main__':
     # data loading setting
     parser.add_argument('--dataset_name', type=str, default='ModelNet40')
     parser.add_argument('--test_size', type=float, default='0.2')
-    parser.add_argument('--num_points', type=int, default='512')
+    parser.add_argument('--num_points', type=int, default='1024')
 
     # data transform setting
-    parser.add_argument('--shift_range', type=float, default='0')
-    parser.add_argument('--angle_range', type=float, default='0')
-    parser.add_argument('--max_scale', type=float, default='1')
-    parser.add_argument('--min_scale', type=float, default='1')
-    parser.add_argument('--sigma', type=float, default='0')
+    parser.add_argument('--shift_range', type=float, default='1')
+    parser.add_argument('--angle_range', type=float, default='6.28')
+    parser.add_argument('--max_scale', type=float, default='2')
+    parser.add_argument('--min_scale', type=float, default='0.5')
+    parser.add_argument('--sigma', type=float, default='0.01')
     parser.add_argument('--clip', type=float, default='0.02')
 
     # Embedding setting
     parser.add_argument('--k', type=int, default='20')
-    parser.add_argument('--num_emb_feats', type=int, default='64')
+    parser.add_argument('--num_emb_feats', type=int, default='128')
 
     # GraphNetwork section
-    parser.add_argument('--num_node_feats', type=int, default='64')
+    parser.add_argument('--num_node_feats', type=int, default='128')
     parser.add_argument('--num_graph_layers', type=int, default='3')
     parser.add_argument('--edge_p', type=float, default='0')
     parser.add_argument('--feat_p', type=float, default='0')

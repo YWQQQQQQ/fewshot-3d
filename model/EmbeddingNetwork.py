@@ -77,7 +77,6 @@ class EmbeddingNetwork(nn.Module):
         #x5_2 = F.adaptive_avg_pool1d(x5, 1).view(num_samples, -1)
         #x5 = torch.cat((x5_1, x5_2), 1)
         embedded_features = x5.max(dim=-1, keepdim=False)[0]
-        print('embedded_features:',embedded_features.shape)
 
         return embedded_features
 
