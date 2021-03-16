@@ -124,7 +124,7 @@ class NodeUpdateNetwork(nn.Module):
             node_feats = self._modules['l_relu{}'.format(l+1)](node_feats)
             if self.dropout > 0:
                 node_feats = self._modules['drop{}'.format(l+1)](node_feats)
-        node_feats = node_feats.transpose(1,2)
+        node_feats = node_feats.transpose(1, 2)
         return node_feats
 
 
@@ -138,7 +138,7 @@ class GraphNetwork(nn.Module):
         self.feat_p = args.feat_p
         self.device = args.device
         for l in range(self.num_layers):
-            edge2node_net = NodeUpdateNetwork(num_in_feats= self.num_node_feats if l > 0 else self.num_emb_feats,
+            edge2node_net = NodeUpdateNetwork(num_in_feats=self.num_node_feats if l > 0 else self.num_emb_feats,
                                               num_node_feats=self.num_node_feats,
                                               device=self.device,
                                               edge_p=self.edge_p)

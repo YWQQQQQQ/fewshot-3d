@@ -79,16 +79,18 @@ def label2edge(sp_label, qry_label):
     num_tasks, num_supports = sp_label.size()
     _, num_queries = qry_label.size()
 
-    full_edge = torch.zeros(num_tasks*num_queries, num_supports+1, num_supports+1)
+    full_edge = torch.zeros(num_queries, num_tasks, num_supports+1, num_supports+1)
 
     for q_idx in range(num_queries):
 
         label = torch.cat([sp_label, qry_label[:, q_idx].unsqueeze(-1)], 1)
         label_i = label.unsqueeze(-1).repeat(1, 1, num_supports+1)
         label_j = label_i.transpose(1, 2)
-        full_edge[q_idx*num_tasks:(q_idx+1)*num_tasks, :, :] = torch.eq(label_i, label_j).float()
 
-    full_edge = full_edge.unsqueeze(1)
+        full_edge[q_idx, :, :, :] = torch.eq(label_i, label_j).float()
+        #print(full_edge.shape)
+    full_edge = full_edge.transpose(0, 1).contiguous()
+    full_edge = full_edge.view(num_tasks*num_queries, 1, num_supports+1, num_supports+1)
     full_edge = torch.cat([full_edge, 1-full_edge], 1)
 
     # full_edge: num_tasks*num_queries, 2, num_supports+1, num_supports+1

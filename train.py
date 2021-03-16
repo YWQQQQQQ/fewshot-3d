@@ -111,17 +111,14 @@ class Model:
 
             # full data: num_tasks*num_sp + num_tasks*qry, num_emb_feat
             # sp_data: num_tasks, num_sp, num_emb_feat
-            # qry_data: num_tasks, num_qry, num_emb_feat
+            # qry_data: num_tasks*num_qry, 1, num_emb_feat
             full_data = self.embeddingNet(full_data)
             sp_data = full_data[:self.num_tasks * self.num_supports, :].view(self.num_tasks, self.num_supports, self.num_emb_feats)
-            qry_data = full_data[self.num_tasks * self.num_supports:, :].view(self.num_tasks, self.num_queries, self.num_emb_feats)
+            qry_data = full_data[self.num_tasks * self.num_supports:, :].view(self.num_tasks*self.num_queries, 1, self.num_emb_feats)
 
             # sp_data: num_tasks*num_qry, num_sp, num_emb_feat
             sp_data = sp_data.unsqueeze(1).repeat(1, self.num_queries, 1, 1)
             sp_data = sp_data.view(self.num_tasks * self.num_queries, self.num_supports, self.num_emb_feats)
-
-            # qry_data: num_tasks*num_qry, 1, num_emb_feat
-            qry_data = qry_data.view(self.num_tasks * self.num_queries, 1, self.num_emb_feats)
 
             # concat the sp and qry to a graph
             # input_node_feat: num_tasks*num_qry, num_sp+1, num_emb_feat
@@ -137,7 +134,7 @@ class Model:
 
             # qry to itself
             input_edge_feat[:, 0, -1, -1] = 1
-            input_edge_feat[:, 1, :-1, -1] = 0
+            input_edge_feat[:, 1, -1, -1] = 0
 
             # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
             logit_layers = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)
@@ -150,7 +147,7 @@ class Model:
             # weighted edge loss for balancing pos/neg
             pos_query_edge_loss_layers = [torch.sum(full_edge_loss_layer*full_edge[:, 0]) / torch.sum(full_edge[:, 0])
                                           for full_edge_loss_layer in full_edge_loss_layers]
-            neg_query_edge_loss_layers = [torch.sum(full_edge_loss_layer*(1-full_edge[:, 0])) / torch.sum(1-full_edge[:, 0])
+            neg_query_edge_loss_layers = [torch.sum(full_edge_loss_layer*full_edge[:, 1]) / torch.sum(full_edge[:, 1])
                                           for full_edge_loss_layer in full_edge_loss_layers]
 
             query_edge_loss_layers = [pos_query_edge_loss_layer + neg_query_edge_loss_layer for
@@ -162,7 +159,7 @@ class Model:
             # compute accuracy
             # edge
 
-            all_edge_pred_layers = [hit(logit_layer, full_edge[:, 0].long()) for logit_layer in logit_layers]
+            all_edge_pred_layers = [hit(logit_layer, full_edge[:, 1].long()) for logit_layer in logit_layers]
             query_edge_acc_layers = [torch.sum(all_edge_pred_layer[:, -1, :-1]+all_edge_pred_layer[:, :-1, -1])
                                       / (2*self.num_tasks*self.num_queries*self.num_supports)
                                       for all_edge_pred_layer in all_edge_pred_layers]
@@ -171,7 +168,7 @@ class Model:
             all_node_pred_layers = [logit_layer[:, 0, :, :-1].max(-1)[1] for logit_layer in logit_layers]
             query_node_pred_layers = [all_node_pred_layer[:, -1] for all_node_pred_layer in all_node_pred_layers]
             query_node_acc_layers = [torch.sum(torch.eq(query_node_pred_layer,
-                                                         full_edge[:, 0, -1, :-1].max(-1)[1])) / (self.num_tasks*self.num_queries)
+                                                         qry_label.view(-1))).float() / (self.num_tasks*self.num_queries)
                                                          for query_node_pred_layer in query_node_pred_layers]
 
             # update model, last layer has more weight
@@ -234,8 +231,7 @@ class Model:
             sp_data = sp_data.unsqueeze(1).repeat(1, self.num_queries, 1, 1)
             sp_data = sp_data.view(self.num_tasks * self.num_queries, self.num_supports, self.num_emb_feats)
             qry_data = qry_data.view(self.num_tasks * self.num_queries, 1, self.num_emb_feats)
-            input_node_feat = torch.cat([sp_data, qry_data],
-                                        1)  # (num_tasks x num_total_queries) x (num_support + 1) x featdim
+            input_node_feat = torch.cat([sp_data, qry_data], 1)  # (num_tasks x num_total_queries) x (num_support + 1) x featdim
             input_edge_feat = 0.5 * torch.ones(self.num_tasks, 2, self.num_supports + 1, self.num_supports + 1).to(
                 self.device)  # num_tasks x 2 x (num_support + 1) x (num_support + 1)
 
@@ -283,14 +279,14 @@ if __name__ == '__main__':
     # data loading setting
     parser.add_argument('--dataset_name', type=str, default='ModelNet40')
     parser.add_argument('--test_size', type=float, default='0.2')
-    parser.add_argument('--num_points', type=int, default='64')
+    parser.add_argument('--num_points', type=int, default='512')
 
     # data transform setting
-    parser.add_argument('--shift_range', type=float, default='1')
-    parser.add_argument('--angle_range', type=float, default='6.28')
-    parser.add_argument('--max_scale', type=float, default='2')
-    parser.add_argument('--min_scale', type=float, default='0.5')
-    parser.add_argument('--sigma', type=float, default='0.01')
+    parser.add_argument('--shift_range', type=float, default='0')
+    parser.add_argument('--angle_range', type=float, default='0')
+    parser.add_argument('--max_scale', type=float, default='1')
+    parser.add_argument('--min_scale', type=float, default='1')
+    parser.add_argument('--sigma', type=float, default='0')
     parser.add_argument('--clip', type=float, default='0.02')
 
     # Embedding setting
