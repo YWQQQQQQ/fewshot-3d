@@ -9,6 +9,7 @@ import argparse
 from utils import *
 import datetime
 import os
+import logging
 
 
 class Model:
@@ -55,8 +56,8 @@ class Model:
         self.test_dataloader = DataLoder.ModelNet40Loader(args, partition='test')
 
         # build model
-        self.embeddingNet = EmbeddingNetwork(args)
-        self.graphNet = GraphNetwork(args)
+        self.embeddingNet = EmbeddingNetwork(args).to(self.device)
+        self.graphNet = GraphNetwork(args).to(self.device)
 
         # build optimizer
         module_params = list(self.embeddingNet.parameters()) + list(self.graphNet.parameters())
@@ -134,11 +135,9 @@ class Model:
                             logit_layer in logit_layers]
 
             # logit --> full_logit (batch_size x 2 x num_samples x num_samples)
-            full_logit_layers = []
-            for l in range(self.num_layers):
-                full_logit_layers.append(torch.zeros(self.num_tasks, 2, self.num_samples, self.num_samples).to(self.device))
+            full_logit_layers = torch.zeros(self.num_layers, self.num_tasks, 2, self.num_samples, self.num_samples).to(self.device)
 
-            for l in range(args.num_layers):
+            for l in range(self.num_layers):
                 full_logit_layers[l][:, :, :self.num_supports, :self.num_supports] = logit_layers[l][:, :, :, :self.num_supports,
                                                                            :self.num_supports].mean(1)
                 full_logit_layers[l][:, :, :self.num_supports, self.num_supports:] = logit_layers[l][:, :, :, :self.num_supports,
@@ -171,7 +170,7 @@ class Model:
 
             # compute  accuracy (num_tasks x num_quries x num_ways)
             query_node_pred_layers = [torch.bmm(full_logit_layer[:, 0, self.num_supports:, :self.num_supports],
-                                                one_hot_encode(self.num_ways, sp_label.long())) for
+                                                one_hot_encode(self.num_ways, sp_label.long()).to(self.device)) for
                                       full_logit_layer in
                                       full_logit_layers]  # (num_tasks x num_quries x num_supports) * (num_tasks x num_supports x num_ways)
             query_node_accr_layers = [
@@ -182,7 +181,7 @@ class Model:
 
             # update model
             total_loss = []
-            for l in range(args.num_layers - 1):
+            for l in range(self.num_layers - 1):
                 total_loss += [total_loss_layers[l].view(-1) * 0.5]
             total_loss += [total_loss_layers[-1].view(-1) * 1.0]
             total_loss = torch.mean(torch.cat(total_loss, 0))
@@ -254,7 +253,7 @@ class Model:
             logit = logit.view(self.num_tasks, self.num_all_queries, 2, self.num_supports + 1, self.num_supports + 1)
             logit = logit[:, :, 0, -1, :-1].squeeze()
 
-            val_pred = torch.bmm(logit, one_hot_encode(self.num_ways, sp_label.long()))
+            val_pred = torch.bmm(logit, one_hot_encode(self.num_ways, sp_label.long()).to(self.device))
             val_acc = torch.eq(torch.max(val_pred, -1)[1], qry_label.long()).float().mean()
 
             return val_acc
@@ -314,4 +313,4 @@ if __name__ == '__main__':
     try:
         model.train()
     finally:
-        model.logger.shutdown()
+        logging.shutdown()

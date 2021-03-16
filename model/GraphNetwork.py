@@ -154,10 +154,8 @@ class GraphNetwork(nn.Module):
         for l in range(self.num_layers):
             # (1) edge to node
             node_feats = self._modules['edge2node_net{}'.format(l+1)](node_feats, edge_feats)
-            print('node', node_feats.shape)
             # (2) node to edge
             edge_feats = self._modules['node2edge_net{}'.format(l+1)](node_feats, edge_feats)
-            print('edge', edge_feats.shape)
 
 
             edge_feat_list.append(edge_feats)

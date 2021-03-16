@@ -16,7 +16,7 @@ def download(root):
     if not os.path.exists(os.path.join(DATA_DIR, 'modelnet40_ply_hdf5_2048')):
         www = 'https://shapenet.cs.stanford.edu/media/modelnet40_ply_hdf5_2048.zip'
         zipfile = os.path.basename(www)
-        os.system('wget %s; unzip %s' % (www, zipfile))
+        os.system('wget --no-check-certificate %s; unzip %s' % (www, zipfile))
         os.system('mv %s %s' % (zipfile[:-4], DATA_DIR))
         os.system('rm %s' % (zipfile))
 
@@ -108,9 +108,9 @@ def get_logger(expr='./experiment', filename='train.log'):
     fh = logging.FileHandler(log_name, mode='w', encoding='utf-8')
     ch = logging.StreamHandler()
 
-    formatter = logging.Formatter('%(asctime)s-[INFO]: %{message}s', datefmt='%a, %d %b %Y %H:%M:%S')
-    fh.setFormatter()
-    ch.setFormatter()
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y %b %d %H:%M:%S')
+    fh.setFormatter(formatter)
+    ch.setFormatter(formatter)
 
     logger.addHandler(fh)
     logger.addHandler(ch)

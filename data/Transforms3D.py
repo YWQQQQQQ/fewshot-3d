@@ -47,12 +47,13 @@ class Scaling:
     def __init__(self, args):
         self.max_scale = args.max_scale
         self.min_scale = args.min_scale
-        #self.device = args.device
+        self.device = args.device
 
     def __call__(self, pcs):
         pc_size = pcs.size()  # batch size*(num_support+num_query), num_features, num_points
 
         scale_vector = torch.rand(pc_size[0])*(self.max_scale-self.min_scale)+self.min_scale
+        scale_vector = scale_vector.to(self.device)
         scale_vector = scale_vector.unsqueeze(-1).unsqueeze(-1).repeat(1, pc_size[1], pc_size[2])
 
         pcs = scale_vector*pcs
@@ -63,7 +64,7 @@ class Perturbation:
     def __init__(self, args):
         self.sigma = args.sigma
         self.clip = args.clip
-        #self.device = args.device
+        self.device = args.device
 
     def __call__(self, pcs):
         pc_size = pcs.size()  # batch size*(num_support+num_query), num_features, num_points
@@ -72,6 +73,7 @@ class Perturbation:
         clip_min = -1 * self.clip
 
         jitter = torch.randn(pc_size)*self.sigma
+        jitter = jitter.to(self.device)
         jitter = (jitter > clip_min)*jitter  # clip at clip_min
         jitter = (jitter < clip_max)*jitter  # clip at clip_max
 

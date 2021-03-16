@@ -20,7 +20,7 @@ class ModelNet40Loader(Dataset):
         self.root = args.root
         self.num_classes = 40
         self.test_size = args.test_size
-
+        self.device = args.device
         self.num_ways = args.num_ways
         self.num_shots = args.num_shots
         self.num_queries = args.num_queries
@@ -123,11 +123,11 @@ class ModelNet40Loader(Dataset):
         new_sp_data = self.transform(sp_data)
         new_qry_data = self.transform(qry_data)
 
-        sp_rel_label = torch.tensor(sp_rel_label)
-        qry_rel_label = torch.tensor(qry_rel_label)
+        sp_rel_label = torch.tensor(sp_rel_label).to(self.device)
+        qry_rel_label = torch.tensor(qry_rel_label).to(self.device)
 
-        sp_abs_label = torch.tensor(sp_abs_label)
-        qry_abs_label = torch.tensor(qry_abs_label)
+        sp_abs_label = torch.tensor(sp_abs_label).to(self.device)
+        qry_abs_label = torch.tensor(qry_abs_label).to(self.device)
 
         return [new_sp_data, sp_rel_label, sp_abs_label, new_qry_data, qry_rel_label, qry_abs_label]
 

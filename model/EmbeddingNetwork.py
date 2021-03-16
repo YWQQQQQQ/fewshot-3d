@@ -51,29 +51,24 @@ class EmbeddingNetwork(nn.Module):
         pc_size = x.size()
         num_samples = pc_size[0]
 
-        print('x0:',x.shape)
         x1 = self.get_graph_feature(x, k=self.k)
         x1 = self.conv1(x1)
         x1 = x1.max(dim=-1, keepdim=False)[0]
-        print('x1:',x1.shape)
 
         x2 = torch.cat([x, x1], dim=1)
         x2 = self.get_graph_feature(x2, k=self.k)
         x2 = self.conv2(x2)
         x2 = x2.max(dim=-1, keepdim=False)[0]
-        print('x2:',x2.shape)
 
         x3 = torch.cat([x, x1, x2], dim=1)
         x3 = self.get_graph_feature(x3, k=self.k)
         x3 = self.conv3(x3)
         x3 = x3.max(dim=-1, keepdim=False)[0]
-        print('x3:',x3.shape)
 
         x4 = torch.cat([x, x1, x2, x3], dim=1)
         x4 = self.get_graph_feature(x4, k=self.k)
         x4 = self.conv4(x4)
         x4 = x4.max(dim=-1, keepdim=False)[0]
-        print('x4:',x4.shape)
 
         x5 = torch.cat((x,x1, x2, x3, x4), dim=1)
 
