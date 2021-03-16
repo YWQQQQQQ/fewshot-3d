@@ -7,7 +7,6 @@ from model.GraphNetwork import GraphNetwork
 
 import argparse
 from utils import *
-import logging
 import datetime
 import os
 
@@ -24,7 +23,7 @@ class Model:
         self.val_interval = args.val_interval
 
         # fewshot task setting
-        self.num_layers = args.num_layers
+        self.num_layers = args.num_graph_layers
         self.num_tasks = args.num_tasks
         self.num_points = args.num_points
         self.num_emb_feats = args.num_emb_feats
@@ -47,7 +46,7 @@ class Model:
             if not os.path.exists(self.expr_folder):
                 os.mkdir(self.expr_folder)
 
-            logging.basicConfig(level=logging.INFO, filename=os.path.join(self.expr_folder, 'train.log'), filemode='w')
+            self.logger = get_logger(self.expr_folder, 'train.log')
 
         # build dataloader
         if self.partition == 'train':
@@ -194,20 +193,18 @@ class Model:
             self.lr_scheduler.step()
 
             # logging
-            logging.info('{0}th iteration, edge_loss:{1}, edge_accr:{2}, node_accr:{3}'.format(iter,
-                                                                                               query_edge_loss_layers[
-                                                                                                   -1],
-                                                                                               query_edge_accr_layers[
-                                                                                                   -1],
-                                                                                               query_node_accr_layers[
-                                                                                                   -1]
-                                                                                               ))
+            self.logger.info(' {0} th iteration, edge_loss: {1}, edge_accr: {2}, node_accr: {3}'
+                             .format(iter,
+                                     query_edge_loss_layers[-1],
+                                     query_edge_accr_layers[-1],
+                                     query_node_accr_layers[-1]
+                                     ))
 
             # evaluation
             if iter % self.val_interval == 0:
                 self.val_acc = self.evaluate()
 
-                logging.info('{0}th iteration, val_accr:{1}'.format(iter, self.val_acc))
+                self.logger.info(' {0} th iteration, val_accr: {1}'.format(iter, self.val_acc))
 
                 torch.save({'iter': iter,
                             'emb': self.embeddingNet.state_dict(),
@@ -270,12 +267,11 @@ if __name__ == '__main__':
 
     # Fundamental setting
     parser.add_argument('--root', type=str, default='./')
-    parser.add_argument('--device', type=str, default='cpu')
+    parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--num_ways', type=int, default='5')
     parser.add_argument('--num_shots', type=int, default='1')
     parser.add_argument('--num_tasks', type=int, default='5')
     parser.add_argument('--num_queries', type=int, default='1')
-    parser.add_argument('--num_layers', type=int, default='2')
     parser.add_argument('--seed', type=float, default='0')
     parser.add_argument('--train_iters', type=int, default='2000')
     parser.add_argument('--test_iters', type=int, default='10')
@@ -292,10 +288,10 @@ if __name__ == '__main__':
     # data loading setting
     parser.add_argument('--dataset_name', type=str, default='ModelNet40')
     parser.add_argument('--test_size', type=float, default='0.2')
-    parser.add_argument('--num_points', type=int, default='256')
+    parser.add_argument('--num_points', type=int, default='1024')
 
     # data transform setting
-    parser.add_argument('--shift_range', type=float, default='2')
+    parser.add_argument('--shift_range', type=float, default='1')
     parser.add_argument('--angle_range', type=float, default='6.28')
     parser.add_argument('--max_scale', type=float, default='2')
     parser.add_argument('--min_scale', type=float, default='0.5')
@@ -304,10 +300,10 @@ if __name__ == '__main__':
 
     # Embedding setting
     parser.add_argument('--k', type=int, default='20')
-    parser.add_argument('--num_emb_feats', type=int, default='128')
+    parser.add_argument('--num_emb_feats', type=int, default='1024')
 
     # GraphNetwork section
-    parser.add_argument('--num_node_feats', type=int, default='128')
+    parser.add_argument('--num_node_feats', type=int, default='1024')
     parser.add_argument('--num_graph_layers', type=int, default='3')
     parser.add_argument('--edge_p', type=float, default='0')
     parser.add_argument('--feat_p', type=float, default='0')
@@ -318,4 +314,4 @@ if __name__ == '__main__':
     try:
         model.train()
     finally:
-        logging.shutdown()
+        model.logger.shutdown()

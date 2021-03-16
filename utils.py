@@ -6,7 +6,7 @@ import random
 import numpy as np
 from sklearn.model_selection import train_test_split
 import torch
-
+import logging
 
 def download(root):
     BASE_DIR = root
@@ -99,5 +99,22 @@ def hit(logit, label):
 def one_hot_encode(num_classes, class_idx):
     return torch.eye(num_classes)[class_idx]
 
+
+def get_logger(expr='./experiment', filename='train.log'):
+    logger = logging.getLogger(filename)
+    logger.setLevel(logging.INFO)
+
+    log_name = os.path.join(expr, filename)
+    fh = logging.FileHandler(log_name, mode='w', encoding='utf-8')
+    ch = logging.StreamHandler()
+
+    formatter = logging.Formatter('%(asctime)s-[INFO]: %{message}s', datefmt='%a, %d %b %Y %H:%M:%S')
+    fh.setFormatter()
+    ch.setFormatter()
+
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+
+    return logger
 if __name__ == '__main__':
     dataset_to_fewshot_dataset('./', 0)
