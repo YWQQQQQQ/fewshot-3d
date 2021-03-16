@@ -184,7 +184,7 @@ class Model:
             self.lr_scheduler.step()
 
             # logging
-            self.logger.info(' {0} th iteration, edge_loss: {1}, edge_accr: {2}, node_accr: {3}'
+            self.logger.info(' {0} th iteration, edge_loss: {1:.3f}, edge_accr: {2:.3f}, node_accr: {3:.3f}'
                              .format(iter,
                                      query_edge_loss_layers[-1],
                                      query_edge_acc_layers[-1],
@@ -196,7 +196,7 @@ class Model:
             if iter % self.val_interval == 0:
                 self.val_acc = self.evaluate()
 
-                self.logger.info(' {0} th iteration, val_accr: {1}'.format(iter, self.val_acc))
+                self.logger.info(' {0} th iteration, val_accr: {1:.3f}'.format(iter, self.val_acc))
 
                 torch.save({'iter': iter,
                             'emb': self.embeddingNet.state_dict(),
@@ -274,9 +274,9 @@ if __name__ == '__main__':
     parser.add_argument('--ckpt', type=str, default=None)
 
     # hyper-parameter setting
-    parser.add_argument('--lr', type=float, default='0.01')
-    parser.add_argument('--weight_decay', type=float, default='0.99')
-    parser.add_argument('--dec_lr', type=float, default='30')
+    parser.add_argument('--lr', type=float, default='1e-3')
+    parser.add_argument('--weight_decay', type=float, default='1e-6')
+    parser.add_argument('--dec_lr', type=float, default='500')
 
 
     # data loading setting
