@@ -23,7 +23,8 @@ class ModelNet40Loader(Dataset):
         self.device = args.device
         self.num_ways = args.num_ways
         self.num_shots = args.num_shots
-        self.num_queries = args.num_queries
+        self.num_supports = args.num_ways * args.num_shots
+        self.num_queries = args.num_ways * 1
         self.num_tasks = args.num_tasks
         self.seed = args.seed
 
@@ -73,25 +74,23 @@ class ModelNet40Loader(Dataset):
         # init task batch data
         sp_data, sp_rel_label, sp_abs_label, qry_data, qry_rel_label, qry_abs_label = [], [], [], [], [], []
 
-        num_supports = self.num_ways * self.num_shots
         for _ in range(self.num_tasks):
-            data = np.zeros(shape=[num_supports, self.num_points, 3],
+            data = np.zeros(shape=[self.num_supports, self.num_points, 3],
                             dtype='float32')
-            rel_label = np.zeros(shape=[num_supports],
+            rel_label = np.zeros(shape=[self.num_supports],
                              dtype='float32')
-            abs_label = np.zeros(shape=[num_supports],
+            abs_label = np.zeros(shape=[self.num_supports],
                                  dtype='float32')
             sp_data.append(data)
             sp_rel_label.append(rel_label)
             sp_abs_label.append(abs_label)
 
-        num_total_queries = self.num_ways * self.num_queries
         for _ in range(self.num_tasks):
-            data = np.zeros(shape=[num_total_queries, self.num_points, 3],
+            data = np.zeros(shape=[self.num_queries, self.num_points, 3],
                             dtype='float32')
-            rel_label = np.zeros(shape=[num_total_queries],
+            rel_label = np.zeros(shape=[self.num_queries],
                              dtype='float32')
-            abs_label = np.zeros(shape=[num_total_queries],
+            abs_label = np.zeros(shape=[self.num_queries],
                                  dtype='float32')
             qry_data.append(data)
             qry_rel_label.append(rel_label)
@@ -104,8 +103,8 @@ class ModelNet40Loader(Dataset):
 
             # for each sampled class in task
             for c_idx in range(self.num_ways):
-                # sample data for support and query (num_shots + num_queries)
-                class_data_list = random.sample(self.data[task_class_list[c_idx]], self.num_shots + self.num_queries)
+                # sample data for support and query (num_shots + 1)
+                class_data_list = random.sample(self.data[task_class_list[c_idx]], self.num_shots + 1)
 
                 # load sample for support set
                 for i_idx in range(self.num_shots):
@@ -115,19 +114,18 @@ class ModelNet40Loader(Dataset):
                     sp_abs_label[t_idx][i_idx + c_idx * self.num_shots] = task_class_list[c_idx]
 
                 # load sample for query set
-                for i_idx in range(self.num_queries):
-                    qry_data[t_idx][i_idx + c_idx * self.num_queries] = class_data_list[self.num_shots + i_idx]
-                    qry_rel_label[t_idx][i_idx + c_idx * self.num_queries] = c_idx
-                    qry_abs_label[t_idx][i_idx + c_idx * self.num_queries] = task_class_list[c_idx]
+                qry_data[t_idx][c_idx] = class_data_list[self.num_shots]
+                qry_rel_label[t_idx][c_idx] = c_idx
+                qry_abs_label[t_idx][c_idx] = task_class_list[c_idx]
 
         new_sp_data = self.transform(sp_data)
         new_qry_data = self.transform(qry_data)
 
-        sp_rel_label = torch.tensor(sp_rel_label).to(self.device)
-        qry_rel_label = torch.tensor(qry_rel_label).to(self.device)
+        sp_rel_label = torch.tensor(sp_rel_label).long().to(self.device)
+        qry_rel_label = torch.tensor(qry_rel_label).long().to(self.device)
 
-        sp_abs_label = torch.tensor(sp_abs_label).to(self.device)
-        qry_abs_label = torch.tensor(qry_abs_label).to(self.device)
+        sp_abs_label = torch.tensor(sp_abs_label).long().to(self.device)
+        qry_abs_label = torch.tensor(qry_abs_label).long().to(self.device)
 
         return [new_sp_data, sp_rel_label, sp_abs_label, new_qry_data, qry_rel_label, qry_abs_label]
 
@@ -151,7 +149,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_ways', type=int, default='5')
     parser.add_argument('--num_shots', type=int, default='1')
     parser.add_argument('--num_tasks', type=int, default='5')
-    parser.add_argument('--num_queries', type=int, default='1')
+    #parser.add_argument('--num_queries', type=int, default='1')
     parser.add_argument('--seed', type=float, default='0')
 
     args = parser.parse_args()
@@ -164,14 +162,53 @@ if __name__ == '__main__':
     dataset = ModelNet40Loader(args)
 
 
-    new_sp_data, sp_data, sp_abs_label, new_qry_data, qry_data, qry_abs_label = dataset.get_task_batch()
+    new_sp_data, sp_rel_label, sp_abs_label, new_qry_data, qry_rel_label, qry_abs_label = dataset.get_task_batch()
     # print(new_sp_data.shape)
     # print(sp_data.shape)
     # print(sp_abs_label.shape)
     # print(new_qry_data.shape)
     # print(qry_data.shape)
     # print(qry_abs_label.shape)
+    task = 4
+    fig = plt.figure()
 
+    for i in range(args.num_ways):
+        x = new_sp_data[task*args.num_ways+i, 0, :]
+        y = new_sp_data[task*args.num_ways+i, 1, :]
+        z = new_sp_data[task*args.num_ways+i, 2, :]
+
+        ax = fig.add_subplot(2, args.num_ways, i + 1, projection='3d')
+        ax.scatter(x,  # x
+                   y,  # y
+                   z,  # z
+                   cmap='Blues',
+                   marker="o")
+        ax.set_xlim(-1, 1)
+        ax.set_ylim(-1, 1)
+        ax.set_zlim(-1, 1)
+        plt.title(shape_name[int(sp_abs_label[task][i].item())] +' '+ str(sp_rel_label[task][i]))
+        plt.xlabel('x')
+        plt.ylabel('y')
+
+        x = new_qry_data[task*args.num_ways+i, 0, :]
+        y = new_qry_data[task*args.num_ways+i, 1, :]
+        z = new_qry_data[task*args.num_ways+i, 2, :]
+
+        ax = fig.add_subplot(2, args.num_ways, i + 6, projection='3d')
+        ax.scatter(x,  # x
+                   y,  # y
+                   z,  # z
+                   cmap='Blues',
+                   marker="o")
+        ax.set_xlim(-1, 1)
+        ax.set_ylim(-1, 1)
+        ax.set_zlim(-1, 1)
+        plt.title(shape_name[int(qry_abs_label[task][i].item())] +' '+ str(qry_rel_label[task][i]))
+        plt.xlabel('x')
+        plt.ylabel('y')
+    plt.show()
+
+'''
     fig = plt.figure()
     for i in range(args.num_ways):
         data = sp_data[3][i]
@@ -254,3 +291,4 @@ if __name__ == '__main__':
         #print(torch.sum((qry_data[i,:,0]-qry_data[i,:,1])**2))
         #print(torch.sum((new_qry_data[i,:,0]-new_qry_data[i,:,1])**2))
 
+'''

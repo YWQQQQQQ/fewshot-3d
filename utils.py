@@ -73,21 +73,26 @@ def dataset_to_fewshot_dataset(root, seed=0, test_size=0.2):
         train_hf.close()
         test_hf.close()
 
-def label2edge(label):
+
+def label2edge(sp_label, qry_label):
     # get size
-    num_samples = label.size(1)
+    num_tasks, num_supports = sp_label.size()
+    _, num_queries = qry_label.size()
 
-    # reshape
-    label_i = label.unsqueeze(-1).repeat(1, 1, num_samples)
-    label_j = label_i.transpose(1, 2)
+    full_edge = torch.zeros(num_tasks*num_queries, num_supports+1, num_supports+1)
 
-    # compute edge
-    edge = torch.eq(label_i, label_j).float()
+    for q_idx in range(num_queries):
 
-    # expand
-    edge = edge.unsqueeze(1)
-    edge = torch.cat([edge, 1 - edge], 1)
-    return edge
+        label = torch.cat([sp_label, qry_label[:, q_idx].unsqueeze(-1)], 1)
+        label_i = label.unsqueeze(-1).repeat(1, 1, num_supports+1)
+        label_j = label_i.transpose(1, 2)
+        full_edge[q_idx*num_tasks:(q_idx+1)*num_tasks, :, :] = torch.eq(label_i, label_j).float()
+
+    full_edge = full_edge.unsqueeze(1)
+    full_edge = torch.cat([full_edge, 1-full_edge], 1)
+
+    # full_edge: num_tasks*num_queries, 2, num_supports+1, num_supports+1
+    return full_edge
 
 
 def hit(logit, label):

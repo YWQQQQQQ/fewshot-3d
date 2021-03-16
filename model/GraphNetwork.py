@@ -102,10 +102,12 @@ class NodeUpdateNetwork(nn.Module):
                 self.add_module('drop{}'.format(l + 1), drop)
 
     def forward(self, node_feats, edge_feats):
-        num_tasks, num_samples, num_feats = node_feats.size()
+        # node_feats: num_batch(num_tasks*num_qry), num_samples(num_sp+1), node_feats(num_emb_feat)
+        num_batches, num_samples, num_feats = node_feats.size()
 
-        # get eye matrix (batch_size x 2 x node_size x node_size)
-        diag_mask = 1.0 - torch.eye(num_samples).unsqueeze(0).unsqueeze(0).repeat(num_tasks, 2, 1, 1).to(self.device)
+        # Mask the node to itself connection (self-loop)
+        # diag_mask: num_batch, 2, num_samples, num_samples
+        diag_mask = 1.0 - torch.eye(num_samples).unsqueeze(0).unsqueeze(0).repeat(num_batches, 2, 1, 1).to(self.device)
 
         # set diagonal as zero and normalize
         edge_feats = F.normalize(edge_feats * diag_mask, p=1, dim=-1)
