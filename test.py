@@ -2,8 +2,7 @@ import numpy as np
 import torch
 import os
 
-a = torch.eye(5).bool()
-b = torch.zeros(5,5)
+b = torch.zeros(1,1,1)
 
-b[a] = 5
-print(b)
+print(b.shape)
+print(b[:,0,:].shape)

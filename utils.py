@@ -157,6 +157,7 @@ def plot_pc(pc):
 def plot_transform_pc(pc_ori, pc_trans, labels, args):
     num_tasks = args.num_tasks
     num_ways = args.num_ways
+    num_ways = args.num_ways
     root = args.root
 
     abs_label, rel_label = labels

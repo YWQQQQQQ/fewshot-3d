@@ -174,7 +174,8 @@ class Model:
 
             # node
             num_qry_node = self.num_tasks*self.num_queries
-            all_node_pred_layers = [torch.bmm(logit_layer[:, 0, :, :-1], one_hot_encode(self.num_ways, sp_label)).max(-1)[1]
+            all_node_pred_layers = [torch.mm(logit_layer[:, 0, :, :-1],
+                                              one_hot_encode(self.num_ways, sp_label.view(-1)).to(self.device)).max(-1)[1]
                                     for logit_layer in logit_layers]
             qry_node_pred_layers = [all_node_pred_layer[:, -1] for all_node_pred_layer in all_node_pred_layers]
             qry_node_acc_layers = [torch.sum(torch.eq(qry_node_pred_layer,
@@ -260,7 +261,9 @@ class Model:
                 logit = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)[-1]
 
                 # node
-                qry_node_pred =  torch.bmm(logit[:, 0, -1, :-1], one_hot_encode(self.num_ways, sp_label)).max(-1)[1]
+                num_qry_node = self.num_tasks*self.num_queries
+                qry_node_pred = torch.mm(logit[:, 0, -1, :-1],
+                                           one_hot_encode(self.num_ways, sp_label.view(-1)).to(self.device)).max(-1)[1]
                 qry_node_preds.append(qry_node_pred)
                 qry_labels.append(qry_label.view(-1))
             qry_node_preds = torch.cat(qry_node_preds, 0)
@@ -281,8 +284,8 @@ if __name__ == '__main__':
     parser.add_argument('--root', type=str, default='./')
     parser.add_argument('--device', type=str, default='cpu')
     parser.add_argument('--num_ways', type=int, default='5')
-    parser.add_argument('--num_shots', type=int, default='1')
-    parser.add_argument('--num_tasks', type=int, default='5')
+    parser.add_argument('--num_shots', type=int, default='5')
+    parser.add_argument('--num_tasks', type=int, default='1')
     #parser.add_argument('--num_queries', type=int, default='1')
     parser.add_argument('--seed', type=float, default='0')
     parser.add_argument('--train_iters', type=int, default='2000')

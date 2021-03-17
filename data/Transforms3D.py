@@ -8,7 +8,6 @@ class List2Tensor:
 
     def __call__(self, pcs):
         pcs = torch.tensor(pcs).to(self.device)
-        test = pcs[2,3,:,:]
         pc_size = pcs.size()  # num_tasks, num_samples, num_points, num_features
         pcs = pcs.view(pc_size[0]*pc_size[1], pc_size[2], pc_size[3])
         pcs = pcs.transpose(1,2)
