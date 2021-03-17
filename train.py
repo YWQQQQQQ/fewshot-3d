@@ -174,7 +174,7 @@ class Model:
 
             # node
             num_qry_node = self.num_tasks*self.num_queries
-            all_node_pred_layers = [torch.mm(logit_layer[:, 0, :, :-1],
+            all_node_pred_layers = [torch.matmul(logit_layer[:, 0, :, :-1],
                                               one_hot_encode(self.num_ways, sp_label.view(-1)).to(self.device)).max(-1)[1]
                                     for logit_layer in logit_layers]
             qry_node_pred_layers = [all_node_pred_layer[:, -1] for all_node_pred_layer in all_node_pred_layers]
@@ -282,7 +282,7 @@ if __name__ == '__main__':
 
     # Fundamental setting
     parser.add_argument('--root', type=str, default='./')
-    parser.add_argument('--device', type=str, default='cpu')
+    parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--num_ways', type=int, default='5')
     parser.add_argument('--num_shots', type=int, default='5')
     parser.add_argument('--num_tasks', type=int, default='1')
@@ -293,7 +293,7 @@ if __name__ == '__main__':
     parser.add_argument('--val_interval', type=int, default='10')
     parser.add_argument('--expr', type=str, default='experiment/')
     parser.add_argument('--ckpt', type=str, default=None)
-    parser.add_argument('--mode', type=str, default='test')
+    parser.add_argument('--mode', type=str, default='train')
 
     # hyper-parameter setting
     parser.add_argument('--lr', type=float, default='1e-3')
