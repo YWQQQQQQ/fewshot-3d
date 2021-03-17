@@ -205,6 +205,9 @@ class Model:
             if iter % self.val_interval == 0:
                 self.val_acc = self.evaluate()
 
+                self.logger.info(' {0} th iteration, val_loss: {1:.3f}'
+                                 .format(iter, self.val_acc))
+                
                 torch.save({'iter': iter,
                             'emb': self.embeddingNet.state_dict(),
                             'gnn': self.graphNet.state_dict(),
@@ -214,7 +217,6 @@ class Model:
         # set as test mode
         self.embeddingNet.eval()
         self.graphNet.eval()
-
         qry_node_preds = []
         qry_labels = []
         with torch.no_grad():
@@ -262,7 +264,7 @@ class Model:
             qry_node_preds = torch.cat(qry_node_preds, 0)
             qry_labels = torch.cat(qry_labels, 0)
 
-            num_qry_node = self.num_tasks*self.num_queries*self.test_iters
+            num_qry_node = self.num_tasks*self.num_queries*self.test_itersz
             qry_node_acc = torch.sum(torch.eq(qry_node_preds, qry_labels)).float() / num_qry_node
 
         return qry_node_acc
@@ -286,7 +288,7 @@ if __name__ == '__main__':
     parser.add_argument('--val_interval', type=int, default='10')
     parser.add_argument('--expr', type=str, default='experiment/')
     parser.add_argument('--ckpt', type=str, default=None)
-    parser.add_argument('--mode', type=str, default='train')
+    parser.add_argument('--mode', type=str, default='test')
 
     # hyper-parameter setting
     parser.add_argument('--lr', type=float, default='1e-3')
