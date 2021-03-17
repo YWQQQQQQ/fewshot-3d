@@ -1,10 +1,6 @@
 import numpy as np
 import torch
+import os
 
-
-a = torch.rand((2,2))
-
-b = a.max(-1)[1]
-
-print(a)
-print(b)
+file = os.path.join('../', 'dataset/modelnet40_ply_hdf5_2048/shape_names.txt')
+print(file)

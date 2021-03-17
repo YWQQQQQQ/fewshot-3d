@@ -282,22 +282,22 @@ if __name__ == '__main__':
     # data loading setting
     parser.add_argument('--dataset_name', type=str, default='ModelNet40')
     parser.add_argument('--test_size', type=float, default='0.2')
-    parser.add_argument('--num_points', type=int, default='1024')
+    parser.add_argument('--num_points', type=int, default='512')
 
     # data transform setting
     parser.add_argument('--shift_range', type=float, default='1')
     parser.add_argument('--angle_range', type=float, default='6.28')
-    parser.add_argument('--max_scale', type=float, default='2')
-    parser.add_argument('--min_scale', type=float, default='0.5')
+    parser.add_argument('--max_scale', type=float, default='1.3')
+    parser.add_argument('--min_scale', type=float, default='0.7')
     parser.add_argument('--sigma', type=float, default='0.01')
     parser.add_argument('--clip', type=float, default='0.02')
 
     # Embedding setting
     parser.add_argument('--k', type=int, default='20')
-    parser.add_argument('--num_emb_feats', type=int, default='128')
+    parser.add_argument('--num_emb_feats', type=int, default='64')
 
     # GraphNetwork section
-    parser.add_argument('--num_node_feats', type=int, default='128')
+    parser.add_argument('--num_node_feats', type=int, default='64')
     parser.add_argument('--num_graph_layers', type=int, default='3')
     parser.add_argument('--edge_p', type=float, default='0')
     parser.add_argument('--feat_p', type=float, default='0')

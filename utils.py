@@ -7,6 +7,8 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 import torch
 import logging
+import matplotlib.pyplot as plt
+
 
 def download(root):
     BASE_DIR = root
@@ -121,7 +123,85 @@ def get_logger(expr='./experiment', filename='train.log'):
 
     logger.addHandler(fh)
     logger.addHandler(ch)
-
     return logger
+
+def plot_pc(pc):
+    if len(pc.size()) == 2:
+        num_pc = 1
+        pcs = [pc]
+    else:
+        num_pc = pc.size()[0]
+        pcs = pc
+
+    fig = plt.figure()
+    for i, pc in enumerate(pcs):
+        x = pc[0, :]
+        y = pc[1, :]
+        z = pc[2, :]
+
+        ax = fig.add_subplot(1, num_pc, i + 1, projection='3d')
+        ax.scatter(x,  # x
+                   y,  # y
+                   z,  # z
+                   cmap='Blues',
+                   marker="o")
+        ax.set_xlim(-1, 1)
+        ax.set_ylim(-1, 1)
+        ax.set_zlim(-1, 1)
+        #plt.title(shape_name[int(sp_abs_label[task][i].item())] + ' ' + str(sp_rel_label[task][i]))
+        plt.xlabel('x')
+        plt.ylabel('y')
+    plt.show()
+
+
+def plot_transform_pc(pc_ori, pc_trans, labels, args):
+    num_tasks = args.num_tasks
+    num_ways = args.num_ways
+    root = args.root
+
+    abs_label, rel_label = labels
+    shape_name = []
+    with open(os.path.join(root, 'dataset/modelnet40_ply_hdf5_2048/shape_names.txt'), 'r') as f:
+        for i in range(40):
+            shape_name.append(f.readline())
+
+    for t in range(num_tasks):
+        fig = plt.figure()
+        for i in range(num_ways):
+            x = pc_ori[t*num_ways+i, 0, :]
+            y = pc_ori[t*num_ways+i, 1, :]
+            z = pc_ori[t*num_ways+i, 2, :]
+
+            ax = fig.add_subplot(2, num_ways, i + 1, projection='3d')
+            ax.scatter(x,  # x
+                       y,  # y
+                       z,  # z
+                       cmap='Blues',
+                       marker="o")
+            ax.set_xlim(-1, 1)
+            ax.set_ylim(-1, 1)
+            ax.set_zlim(-1, 1)
+            plt.title(shape_name[int(abs_label[t][i].item())] +' '+ str(rel_label[t][i]))
+            plt.xlabel('x')
+            plt.ylabel('y')
+
+            x = pc_trans[t*num_ways+i, 0, :]
+            y = pc_trans[t*num_ways+i, 1, :]
+            z = pc_trans[t*num_ways+i, 2, :]
+
+            ax = fig.add_subplot(2, num_ways, num_ways + i+1, projection='3d')
+            ax.scatter(x,  # x
+                       y,  # y
+                       z,  # z
+                       cmap='Blues',
+                       marker="o")
+            ax.set_xlim(-1, 1)
+            ax.set_ylim(-1, 1)
+            ax.set_zlim(-1, 1)
+            plt.title(shape_name[int(abs_label[t][i].item())] +' '+ str(rel_label[t][i]))
+            plt.xlabel('x')
+            plt.ylabel('y')
+        plt.show()
+
 if __name__ == '__main__':
     dataset_to_fewshot_dataset('./', 0)
