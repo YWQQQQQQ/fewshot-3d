@@ -155,7 +155,7 @@ class Model:
             neg_qry_edge_loss_layers = [torch.sum(qry_edge_loss_layer*full_edge[:, 1]) / num_neg_qry_edge
                                           for qry_edge_loss_layer in qry_edge_loss_layers]
 
-            qry_edge_loss_layers = [2*pos_qry_edge_loss_layer + neg_qry_edge_loss_layer for
+            qry_edge_loss_layers = [pos_qry_edge_loss_layer + neg_qry_edge_loss_layer for
                                       (pos_qry_edge_loss_layer, neg_qry_edge_loss_layer) in
                                       zip(pos_qry_edge_loss_layers, neg_qry_edge_loss_layers)]
 

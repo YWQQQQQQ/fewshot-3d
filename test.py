@@ -2,8 +2,8 @@ import numpy as np
 import torch
 import os
 
-a = torch.zeros(5,5)
+a = torch.eye(5).bool()
 b = torch.zeros(5,5)
 
-c = a*b
-print(c)
+b[a] = 5
+print(b)
