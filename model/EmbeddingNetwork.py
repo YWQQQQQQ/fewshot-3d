@@ -17,9 +17,9 @@ def knn(x, k):
     return idx[:,:,1:]
 
 
-class EmbeddingNetwork(nn.Module):
+class LDGCNN(nn.Module):
     def __init__(self, args):
-        super(EmbeddingNetwork, self).__init__()
+        super(LDGCNN, self).__init__()
 
         self.k = args.k
         self.device = args.device
@@ -48,8 +48,6 @@ class EmbeddingNetwork(nn.Module):
                                    nn.LeakyReLU(negative_slope=0.2))
 
     def forward(self, x):
-        pc_size = x.size()
-        num_samples = pc_size[0]
 
         x1 = self.get_graph_feature(x, k=self.k)
         x1 = self.conv1(x1)
@@ -101,6 +99,33 @@ class EmbeddingNetwork(nn.Module):
         feature = torch.cat((feature - x, x), dim=3).permute(0, 3, 1, 2).contiguous() # num_samples, num_features, num_poinbts, num_neighbors
 
         return feature
+
+
+class PointNet(nn.Module):
+    def __init__(self, args):
+        super(PointNet, self).__init__()
+        self.args = args
+        self.conv1 = nn.Conv1d(3, 64, kernel_size=1, bias=False)
+        self.conv2 = nn.Conv1d(64, 64, kernel_size=1, bias=False)
+        self.conv3 = nn.Conv1d(64, 64, kernel_size=1, bias=False)
+        self.conv4 = nn.Conv1d(64, 128, kernel_size=1, bias=False)
+        self.conv5 = nn.Conv1d(128, args.num_emb_feats, kernel_size=1, bias=False)
+        self.bn1 = nn.BatchNorm1d(64)
+        self.bn2 = nn.BatchNorm1d(64)
+        self.bn3 = nn.BatchNorm1d(64)
+        self.bn4 = nn.BatchNorm1d(128)
+        self.bn5 = nn.BatchNorm1d(args.num_emb_feats)
+
+    def forward(self, x):
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = F.relu(self.bn3(self.conv3(x)))
+        x = F.relu(self.bn4(self.conv4(x)))
+        x = F.relu(self.bn5(self.conv5(x)))
+        emb_feats = F.adaptive_max_pool1d(x, 1).squeeze()
+
+        return emb_feats
+
 
 if __name__ == '__main__':
     import argparse

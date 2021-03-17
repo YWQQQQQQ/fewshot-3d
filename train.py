@@ -2,7 +2,7 @@ import torch
 from torch import optim
 from torch import nn
 from data import DataLoder
-from model.EmbeddingNetwork import EmbeddingNetwork
+from model import EmbeddingNetwork
 from model.GraphNetwork import GraphNetwork
 
 import argparse
@@ -22,6 +22,7 @@ class Model:
         self.train_iters = args.train_iters
         self.test_iters = args.test_iters
         self.val_interval = args.val_interval
+        self.emb_net = args.emb_net
 
         # fewshot task setting
         self.num_layers = args.num_graph_layers
@@ -55,7 +56,10 @@ class Model:
         self.test_dataloader = DataLoder.ModelNet40Loader(args, partition='test')
 
         # build model
-        self.embeddingNet = EmbeddingNetwork(args).to(self.device)
+        if self.emb_net == 'ldgcnn':
+            self.embeddingNet = EmbeddingNetwork.LDGCNN(args).to(self.device)
+        elif self.emb_net == 'pointnet':
+            self.embeddingNet = EmbeddingNetwork.PointNet(args).to(self.device)
         self.graphNet = GraphNetwork(args).to(self.device)
 
         # build optimizer
@@ -201,62 +205,67 @@ class Model:
             if iter % self.val_interval == 0:
                 self.val_acc = self.evaluate()
 
-                self.logger.info(' {0} th iteration, val_accr: {1:.3f}'.format(iter, self.val_acc))
-
                 torch.save({'iter': iter,
                             'emb': self.embeddingNet.state_dict(),
                             'gnn': self.graphNet.state_dict(),
                             'optim': self.optimizer.state_dict()}, os.path.join(self.expr_folder, 'model.pt'))
 
     def evaluate(self):
-        for iter in range(self.test_iters):
-            sp_data, sp_label, _, qry_data, qry_label, _ = self.test_dataloader.get_task_batch()
+        # set as test mode
+        self.embeddingNet.eval()
+        self.graphNet.eval()
 
-            full_data = torch.cat([sp_data, qry_data], 0)
-            full_edge = label2edge(sp_label, qry_label).to(self.device)
+        qry_node_preds = []
+        qry_labels = []
+        with torch.no_grad():
+            for iter in range(self.test_iters):
+                sp_data, sp_label, _, qry_data, qry_label, _ = self.test_dataloader.get_task_batch()
 
-            # set as train mode
-            self.embeddingNet.eval()
-            self.graphNet.eval()
+                full_data = torch.cat([sp_data, qry_data], 0)
+                full_edge = label2edge(sp_label, qry_label).to(self.device)
 
-            # full data: num_tasks*num_sp + num_tasks*qry, num_emb_feat
-            # sp_data: num_tasks, num_sp, num_emb_feat
-            # qry_data: num_tasks*num_qry, 1, num_emb_feat
-            full_data = self.embeddingNet(full_data)
-            sp_data = full_data[:self.num_tasks * self.num_supports, :].view(self.num_tasks, self.num_supports,
-                                                                             self.num_emb_feats)
-            qry_data = full_data[self.num_tasks * self.num_supports:, :].view(self.num_tasks * self.num_queries, 1,
-                                                                              self.num_emb_feats)
+                # full data: num_tasks*num_sp + num_tasks*qry, num_emb_feat
+                # sp_data: num_tasks, num_sp, num_emb_feat
+                # qry_data: num_tasks*num_qry, 1, num_emb_feat
+                full_data = self.embeddingNet(full_data)
+                sp_data = full_data[:self.num_tasks * self.num_supports, :].view(self.num_tasks, self.num_supports,
+                                                                                 self.num_emb_feats)
+                qry_data = full_data[self.num_tasks * self.num_supports:, :].view(self.num_tasks * self.num_queries, 1,
+                                                                                  self.num_emb_feats)
 
-            # sp_data: num_tasks*num_qry, num_sp, num_emb_feat
-            sp_data = sp_data.unsqueeze(1).repeat(1, self.num_queries, 1, 1)
-            sp_data = sp_data.view(self.num_tasks * self.num_queries, self.num_supports, self.num_emb_feats)
+                # sp_data: num_tasks*num_qry, num_sp, num_emb_feat
+                sp_data = sp_data.unsqueeze(1).repeat(1, self.num_queries, 1, 1)
+                sp_data = sp_data.view(self.num_tasks * self.num_queries, self.num_supports, self.num_emb_feats)
 
-            # concat the sp and qry to a graph
-            # input_node_feat: num_tasks*num_qry, num_sp+1, num_emb_feat
-            # input_edge_feat: num_tasks*num_qry, 2, num_sp+1, num_sp+1
-            input_node_feat = torch.cat([sp_data, qry_data], 1)
+                # concat the sp and qry to a graph
+                # input_node_feat: num_tasks*num_qry, num_sp+1, num_emb_feat
+                # input_edge_feat: num_tasks*num_qry, 2, num_sp+1, num_sp+1
+                input_node_feat = torch.cat([sp_data, qry_data], 1)
 
-            # set the qry to others as 0.5 while keep qry to itself as 1
-            input_edge_feat = full_edge.clone()
+                # set the qry to others as 0.5 while keep qry to itself as 1
+                input_edge_feat = full_edge.clone()
 
-            # qry to others
-            input_edge_feat[:, :, -1, :-1] = 0.5
-            input_edge_feat[:, :, :-1, -1] = 0.5
+                # qry to others
+                input_edge_feat[:, :, -1, :-1] = 0.5
+                input_edge_feat[:, :, :-1, -1] = 0.5
 
-            # qry to itself
-            input_edge_feat[:, 0, -1, -1] = 1
-            input_edge_feat[:, 1, -1, -1] = 0
+                # qry to itself
+                input_edge_feat[:, 0, -1, -1] = 1
+                input_edge_feat[:, 1, -1, -1] = 0
 
-            # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
-            logit = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)[-1]
+                # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
+                logit = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)[-1]
 
-            # node
-            query_node_pred = logit[:, 0, -1, :-1].max(-1)[1]
-            query_node_acc = torch.sum(torch.eq(query_node_pred, qry_label.view(-1))).float() / (self.num_tasks*self.num_queries)
+                # node
+                qry_node_preds.append(logit[:, 0, -1, :-1].max(-1)[1])
+                qry_labels.append(qry_label.view(-1))
+            qry_node_preds = torch.cat(qry_node_preds, 0)
+            qry_labels = torch.cat(qry_labels, 0)
 
+            num_qry_node = self.num_tasks*self.num_queries*self.test_iters
+            qry_node_acc = torch.sum(torch.eq(qry_node_preds, qry_labels)).float() / num_qry_node
 
-            return query_node_acc
+        return qry_node_acc
 
 
 
@@ -273,10 +282,11 @@ if __name__ == '__main__':
     #parser.add_argument('--num_queries', type=int, default='1')
     parser.add_argument('--seed', type=float, default='0')
     parser.add_argument('--train_iters', type=int, default='2000')
-    parser.add_argument('--test_iters', type=int, default='10')
+    parser.add_argument('--test_iters', type=int, default='20')
     parser.add_argument('--val_interval', type=int, default='10')
     parser.add_argument('--expr', type=str, default='experiment/')
     parser.add_argument('--ckpt', type=str, default=None)
+    parser.add_argument('--mode', type=str, default='train')
 
     # hyper-parameter setting
     parser.add_argument('--lr', type=float, default='1e-3')
@@ -300,6 +310,7 @@ if __name__ == '__main__':
     # Embedding setting
     parser.add_argument('--k', type=int, default='20')
     parser.add_argument('--num_emb_feats', type=int, default='64')
+    parser.add_argument('--emb_net', type=str, default='pointnet')
 
     # GraphNetwork section
     parser.add_argument('--num_node_feats', type=int, default='64')
@@ -309,8 +320,12 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    model = Model(args, partition='train')
+    model = Model(args, partition=args.mode)
     try:
-        model.train()
+        if args.mode == 'train':
+            model.train()
+        else:
+            val_acc = model.evaluate()
+            print(val_acc)
     finally:
         logging.shutdown()

@@ -14,6 +14,7 @@ class List2Tensor:
         pcs = pcs.transpose(1,2)
         return pcs
 
+
 class Translation:
     def __init__(self, args):
         self.shift_range = args.shift_range
@@ -138,24 +139,3 @@ if __name__ == '__main__':
     from torchvision import transforms
     import matplotlib.pyplot as plt
 
-    transform = transforms.Compose([
-        List2Array(),
-        ToTensor(),
-        Translation(),
-        Rotation()])
-    l = [np.zeros((4, 1024, 3))]*5
-    l = transform(l)
-    points = l[0]
-    x = points[0,:]
-    print(points)
-    y = points[1,:]
-    z = points[2,:]
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(x,  # x
-               y,  # y
-               z,  # z
-               c=z,  # height data for color
-               cmap='Blues',
-               marker="o")
-    plt.show()
