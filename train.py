@@ -35,7 +35,7 @@ class Model:
         self.sp_edge_mask = torch.zeros(self.num_tasks*self.num_queries, self.num_samples, self.num_samples).to(self.device)
         self.sp_edge_mask[:, :self.num_supports, :self.num_supports] = 1
         self.qry_edge_mask = 1 - self.sp_edge_mask
-        self.evaluation_mask = 1 - torch.eye(self.num_samples).unsqueeze(0).repeat(self.num_tasks*self.num_queries, 1, 1)
+        self.evaluation_mask = 1 - torch.eye(self.num_samples).unsqueeze(0).repeat(self.num_tasks*self.num_queries, 1, 1).to(self.device)
 
         # create log file
         if self.partition == 'train':
@@ -155,7 +155,7 @@ class Model:
             neg_qry_edge_loss_layers = [torch.sum(qry_edge_loss_layer*full_edge[:, 1]) / num_neg_qry_edge
                                           for qry_edge_loss_layer in qry_edge_loss_layers]
 
-            qry_edge_loss_layers = [pos_qry_edge_loss_layer + neg_qry_edge_loss_layer for
+            qry_edge_loss_layers = [2*pos_qry_edge_loss_layer + neg_qry_edge_loss_layer for
                                       (pos_qry_edge_loss_layer, neg_qry_edge_loss_layer) in
                                       zip(pos_qry_edge_loss_layers, neg_qry_edge_loss_layers)]
 
@@ -266,7 +266,7 @@ if __name__ == '__main__':
 
     # Fundamental setting
     parser.add_argument('--root', type=str, default='./')
-    parser.add_argument('--device', type=str, default='cuda')
+    parser.add_argument('--device', type=str, default='cpu')
     parser.add_argument('--num_ways', type=int, default='5')
     parser.add_argument('--num_shots', type=int, default='1')
     parser.add_argument('--num_tasks', type=int, default='5')
@@ -287,7 +287,7 @@ if __name__ == '__main__':
     # data loading setting
     parser.add_argument('--dataset_name', type=str, default='ModelNet40')
     parser.add_argument('--test_size', type=float, default='0.2')
-    parser.add_argument('--num_points', type=int, default='512')
+    parser.add_argument('--num_points', type=int, default='128')
 
     # data transform setting
     parser.add_argument('--shift_range', type=float, default='1')

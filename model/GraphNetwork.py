@@ -60,17 +60,17 @@ class EdgeUpdateNetwork(nn.Module):
 
         diag_mask = 1.0 - torch.eye(num_samples).unsqueeze(0).unsqueeze(0).repeat(num_tasks, 2, 1, 1).to(self.device)
         edge_feats = edge_feats * diag_mask
-        merge_sum = torch.sum(edge_feats, -1, True)
+        #merge_sum = torch.sum(edge_feats, -1, True)
         # set diagonal as zero and normalize
-        edge_feats = F.normalize(torch.cat([sim_val, dsim_val], 1) * edge_feats, p=1, dim=-1) * merge_sum
+        edge_feats = F.normalize(torch.cat([sim_val, dsim_val], 1) * edge_feats, p=1, dim=-1) #* merge_sum
         force_edge_feat = torch.cat(
                                     (torch.eye(num_samples).unsqueeze(0),
                                      torch.zeros(num_samples, num_samples).unsqueeze(0)),
                                     dim=0).unsqueeze(0).repeat(num_tasks, 1, 1, 1).to(self.device)
 
         edge_feats = edge_feats + force_edge_feat
-        edge_feats = edge_feats + 1e-6  # Prevent division by zero
-        edge_feats = edge_feats / torch.sum(edge_feats, dim=1).unsqueeze(1).repeat(1, 2, 1, 1)
+        #edge_feats = edge_feats + 1e-6  # Prevent division by zero
+        #edge_feats = edge_feats / torch.sum(edge_feats, dim=1).unsqueeze(1).repeat(1, 2, 1, 1)
 
         return edge_feats
 
@@ -110,7 +110,7 @@ class NodeUpdateNetwork(nn.Module):
         diag_mask = 1.0 - torch.eye(num_samples).unsqueeze(0).unsqueeze(0).repeat(num_batches, 2, 1, 1).to(self.device)
 
         # set diagonal as zero and normalize
-        edge_feats = F.normalize(edge_feats * diag_mask, p=1, dim=-1)
+        edge_feats = edge_feats * diag_mask
 
         # compute attention and aggregate
         aggr_feats = torch.bmm(torch.cat(torch.split(edge_feats, 1, 1), 2).squeeze(1), node_feats)
