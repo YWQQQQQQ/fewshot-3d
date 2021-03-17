@@ -302,7 +302,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_points', type=int, default='128')
 
     # data transform setting
-    parser.add_argument('--shift_range', type=float, default='1')
+    parser.add_argument('--shift_range', type=float, default='0')
     parser.add_argument('--x_range', type=float, default='1.57')
     parser.add_argument('--y_range', type=float, default='1.57')
     parser.add_argument('--z_range', type=float, default='6.28')

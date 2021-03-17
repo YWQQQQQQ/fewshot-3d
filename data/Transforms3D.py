@@ -126,7 +126,7 @@ class Rotation:
 
         pcs = torch.bmm(rot_matrix, pcs)
         pcs_new_center = torch.mean(pcs, -1)
-        pcs += pcs_new_center-pcs_center
+        pcs += (pcs_new_center-pcs_center).unsqueeze(-1).repeat(1,1,pc_size[-1])
         # print('theta:',z_theta)
         # print('matrix:',(z_rot_matrix))
         # print('pcs0:',pcs[0,:,0])

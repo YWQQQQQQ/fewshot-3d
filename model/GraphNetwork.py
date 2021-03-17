@@ -91,7 +91,7 @@ class NodeUpdateNetwork(nn.Module):
             bn = nn.BatchNorm1d(num_features=self.num_feats_list[l])
             l_relu = nn.LeakyReLU()
             if self.dropout > 0:
-                drop = nn.Dropout1d(p=self.dropout)
+                drop = nn.Dropout(p=self.dropout)
 
             self.add_module('conv{}'.format(l+1), conv)
             self.add_module('bn{}'.format(l+1), bn)
