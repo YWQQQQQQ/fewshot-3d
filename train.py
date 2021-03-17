@@ -174,7 +174,8 @@ class Model:
 
             # node
             num_qry_node = self.num_tasks*self.num_queries
-            all_node_pred_layers = [logit_layer[:, 0, :, :-1].max(-1)[1] for logit_layer in logit_layers]
+            all_node_pred_layers = [torch.bmm(logit_layer[:, 0, :, :-1], one_hot_encode(self.num_ways, sp_label)).max(-1)[1]
+                                    for logit_layer in logit_layers]
             qry_node_pred_layers = [all_node_pred_layer[:, -1] for all_node_pred_layer in all_node_pred_layers]
             qry_node_acc_layers = [torch.sum(torch.eq(qry_node_pred_layer,
                                                       qry_label.view(-1))).float() / num_qry_node
@@ -259,7 +260,8 @@ class Model:
                 logit = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)[-1]
 
                 # node
-                qry_node_preds.append(logit[:, 0, -1, :-1].max(-1)[1])
+                qry_node_pred =  torch.bmm(logit[:, 0, -1, :-1], one_hot_encode(self.num_ways, sp_label)).max(-1)[1]
+                qry_node_preds.append(qry_node_pred)
                 qry_labels.append(qry_label.view(-1))
             qry_node_preds = torch.cat(qry_node_preds, 0)
             qry_labels = torch.cat(qry_labels, 0)
