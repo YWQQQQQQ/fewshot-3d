@@ -185,7 +185,7 @@ class Model:
 
             # update model, last layer has more weight
             total_loss = []
-            for l in range(self.num_layers - 1):
+            for l in range(self.num_layers):
                 total_loss += [total_loss_layers[l].view(-1) * 0.5]
             total_loss += [total_loss_layers[-1].view(-1) * 1.0]
             total_loss = torch.mean(torch.cat(total_loss, 0))
@@ -293,7 +293,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=float, default='0')
     parser.add_argument('--train_iters', type=int, default='2000')
     parser.add_argument('--test_iters', type=int, default='20')
-    parser.add_argument('--val_interval', type=int, default='10')
+    parser.add_argument('--val_interval', type=int, default='50')
     parser.add_argument('--expr', type=str, default='experiment/')
     parser.add_argument('--ckpt', type=str, default=None)
     parser.add_argument('--mode', type=str, default='train')

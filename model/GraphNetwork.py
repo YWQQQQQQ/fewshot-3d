@@ -36,7 +36,7 @@ class EdgeUpdateNetwork(nn.Module):
             self.add_module('conv_out', conv_out)
 
     def forward(self, node_feats, edge_feats):
-        # node_feats: num_tasks, num_queries, num_features, num_supports+1
+        # node_feats: num_tasks*num_queries, num_supports+1, num_features
         # compute abs(x_i, x_j)
         num_tasks, num_samples, num_feats = node_feats.size()
         x_i = node_feats.unsqueeze(2)
@@ -151,6 +151,14 @@ class GraphNetwork(nn.Module):
     def forward(self, node_feats, edge_feats):
         # for each layer
         edge_feat_list = []
+        x_i = node_feats.unsqueeze(2)
+        x_j = torch.transpose(x_i, 1, 2)
+        x_ij = torch.abs(x_i - x_j)
+        dsim_val = torch.sum(x_ij**2, -1).unsqueeze(1)
+        sim_val = 1 - dsim_val
+        logit_layer = F.normalize(torch.cat([sim_val, dsim_val], 1), p=1, dim=-1) #* merge_sum
+        edge_feat_list.append(logit_layer)
+
         for l in range(self.num_layers):
             # (1) edge to node
             node_feats = self._modules['edge2node_net{}'.format(l+1)](node_feats, edge_feats)
