@@ -84,18 +84,19 @@ class Perturbation:
 
 class Rotation:
     def __init__(self, args):
-        self.angle_range = args.angle_range
         self.device = args.device
-        if self.angle_range < 0 or self.angle_range > 2*np.pi:
-            raise NotImplementedError('Angle range should be between 0 and 2*pi')
+        self.x_range = args.x_range
+        self.y_range = args.y_range
+        self.z_range = args.z_range
 
     def __call__(self, pcs):
         pc_size = pcs.size()  # num_tasks*num_samples, num_points, num_features
 
+        pcs_center = torch.mean(pcs, -1) 
         # Rotation matrix construction
         # x rotation
         x_rot_matrix = torch.eye(pc_size[1]).unsqueeze(0).repeat(pc_size[0],1,1).to(self.device)
-        x_theta = torch.rand(pc_size[0]) * self.angle_range
+        x_theta = torch.rand(pc_size[0]) * self.x_range
 
         x_rot_matrix[:, 1, 1] = torch.cos(x_theta)
         x_rot_matrix[:, 1, 2] = torch.sin(x_theta)
@@ -104,7 +105,7 @@ class Rotation:
 
         # y rotation
         y_rot_matrix = torch.eye(pc_size[1]).unsqueeze(0).repeat(pc_size[0],1,1).to(self.device)
-        y_theta = torch.rand(pc_size[0]) * self.angle_range
+        y_theta = torch.rand(pc_size[0]) * self.y_range
 
         y_rot_matrix[:, 0, 0] = torch.cos(y_theta)
         y_rot_matrix[:, 0, 2] = -torch.sin(y_theta)
@@ -113,7 +114,7 @@ class Rotation:
 
         # z rotation
         z_rot_matrix = torch.eye(pc_size[1]).unsqueeze(0).repeat(pc_size[0],1,1).to(self.device)
-        z_theta = torch.rand(pc_size[0]) * self.angle_range
+        z_theta = torch.rand(pc_size[0]) * self.z_range
 
         z_rot_matrix[:, 0, 0] = torch.cos(z_theta)
         z_rot_matrix[:, 0, 1] = torch.sin(z_theta)
@@ -124,7 +125,8 @@ class Rotation:
         rot_matrix = torch.bmm(torch.bmm(x_rot_matrix, y_rot_matrix), z_rot_matrix)
 
         pcs = torch.bmm(rot_matrix, pcs)
-
+        pcs_new_center = torch.mean(pcs, -1)
+        pcs += pcs_new_center-pcs_center
         # print('theta:',z_theta)
         # print('matrix:',(z_rot_matrix))
         # print('pcs0:',pcs[0,:,0])

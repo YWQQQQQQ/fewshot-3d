@@ -43,7 +43,7 @@ class Model:
             if not os.path.exists(os.path.join(self.root, args.expr)):
                 os.mkdir(args.expr)
 
-            self.expr_folder = os.path.join(args.expr, str(datetime.datetime.now())[5:19].replace(':', '-'))
+            self.expr_folder = os.path.join(args.expr, str(datetime.datetime.now())[5:19].replace(':', '-').replace(' ', '-'))
             if not os.path.exists(self.expr_folder):
                 os.mkdir(self.expr_folder)
 
@@ -264,7 +264,7 @@ class Model:
             qry_node_preds = torch.cat(qry_node_preds, 0)
             qry_labels = torch.cat(qry_labels, 0)
 
-            num_qry_node = self.num_tasks*self.num_queries*self.test_itersz
+            num_qry_node = self.num_tasks*self.num_queries*self.test_iters
             qry_node_acc = torch.sum(torch.eq(qry_node_preds, qry_labels)).float() / num_qry_node
 
         return qry_node_acc
@@ -303,7 +303,9 @@ if __name__ == '__main__':
 
     # data transform setting
     parser.add_argument('--shift_range', type=float, default='1')
-    parser.add_argument('--angle_range', type=float, default='6.28')
+    parser.add_argument('--x_range', type=float, default='1.57')
+    parser.add_argument('--y_range', type=float, default='1.57')
+    parser.add_argument('--z_range', type=float, default='6.28')
     parser.add_argument('--max_scale', type=float, default='1.3')
     parser.add_argument('--min_scale', type=float, default='0.7')
     parser.add_argument('--sigma', type=float, default='0.01')
