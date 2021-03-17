@@ -31,12 +31,11 @@ class Model:
         self.num_ways = args.num_ways
         self.num_supports = self.num_ways * args.num_shots
         self.num_queries = args.num_ways * 1
-        self.num_samples = self.num_supports + self.num_queries
-        self.support_edge_mask = torch.zeros(args.num_tasks, self.num_samples, self.num_samples).to(self.device)
-        self.support_edge_mask[:, :self.num_supports, :self.num_supports] = 1
-        self.query_edge_mask = 1 - self.support_edge_mask
-        self.evaluation_mask = torch.ones(args.num_tasks, self.num_samples, self.num_samples).to(self.device)
-        self.evaluation_mask[:, self.num_supports:, self.num_supports:] = 0
+        self.num_samples = self.num_supports + 1
+        self.sp_edge_mask = torch.zeros(self.num_tasks*self.num_queries, self.num_samples, self.num_samples).to(self.device)
+        self.sp_edge_mask[:, :self.num_supports, :self.num_supports] = 1
+        self.qry_edge_mask = 1 - self.sp_edge_mask
+        self.evaluation_mask = 1 - torch.eye(self.num_samples).unsqueeze(0).repeat(self.num_tasks*self.num_queries, 1, 1)
 
         # create log file
         if self.partition == 'train':
@@ -144,32 +143,38 @@ class Model:
             full_edge_loss_layers = [self.edge_loss(logit_layer[:, 0], full_edge[:, 0]) for
                                      logit_layer in logit_layers]
 
+            qry_edge_loss_layers = [full_edge_loss_layer*self.qry_edge_mask*self.evaluation_mask
+                                    for full_edge_loss_layer in full_edge_loss_layers]
+
             # weighted edge loss for balancing pos/neg
-            pos_query_edge_loss_layers = [torch.sum(full_edge_loss_layer*full_edge[:, 0]) / torch.sum(full_edge[:, 0])
-                                          for full_edge_loss_layer in full_edge_loss_layers]
-            neg_query_edge_loss_layers = [torch.sum(full_edge_loss_layer*full_edge[:, 1]) / torch.sum(full_edge[:, 1])
-                                          for full_edge_loss_layer in full_edge_loss_layers]
+            num_pos_qry_edge = torch.sum(full_edge[:, 0]*self.qry_edge_mask*self.evaluation_mask)
+            pos_qry_edge_loss_layers = [torch.sum(qry_edge_loss_layer*full_edge[:, 0]) / num_pos_qry_edge
+                                          for qry_edge_loss_layer in qry_edge_loss_layers]
 
-            query_edge_loss_layers = [pos_query_edge_loss_layer + neg_query_edge_loss_layer for
-                                      (pos_query_edge_loss_layer, neg_query_edge_loss_layer) in
-                                      zip(pos_query_edge_loss_layers, neg_query_edge_loss_layers)]
+            num_neg_qry_edge = torch.sum(full_edge[:, 1]*self.qry_edge_mask*self.evaluation_mask)
+            neg_qry_edge_loss_layers = [torch.sum(qry_edge_loss_layer*full_edge[:, 1]) / num_neg_qry_edge
+                                          for qry_edge_loss_layer in qry_edge_loss_layers]
 
-            total_loss_layers = query_edge_loss_layers
+            qry_edge_loss_layers = [pos_qry_edge_loss_layer + neg_qry_edge_loss_layer for
+                                      (pos_qry_edge_loss_layer, neg_qry_edge_loss_layer) in
+                                      zip(pos_qry_edge_loss_layers, neg_qry_edge_loss_layers)]
+
+            total_loss_layers = qry_edge_loss_layers
 
             # compute accuracy
             # edge
-
+            num_qry_edge = torch.sum(self.qry_edge_mask*self.evaluation_mask)
             all_edge_pred_layers = [hit(logit_layer, full_edge[:, 1].long()) for logit_layer in logit_layers]
-            query_edge_acc_layers = [torch.sum(all_edge_pred_layer[:, -1, :-1]+all_edge_pred_layer[:, :-1, -1])
-                                      / (2*self.num_tasks*self.num_queries*self.num_supports)
-                                      for all_edge_pred_layer in all_edge_pred_layers]
+            qry_edge_acc_layers = [torch.sum(all_edge_pred_layer*self.qry_edge_mask*self.evaluation_mask)
+                                      / num_qry_edge for all_edge_pred_layer in all_edge_pred_layers]
 
             # node
+            num_qry_node = self.num_tasks*self.num_queries
             all_node_pred_layers = [logit_layer[:, 0, :, :-1].max(-1)[1] for logit_layer in logit_layers]
-            query_node_pred_layers = [all_node_pred_layer[:, -1] for all_node_pred_layer in all_node_pred_layers]
-            query_node_acc_layers = [torch.sum(torch.eq(query_node_pred_layer,
-                                                         qry_label.view(-1))).float() / (self.num_tasks*self.num_queries)
-                                                         for query_node_pred_layer in query_node_pred_layers]
+            qry_node_pred_layers = [all_node_pred_layer[:, -1] for all_node_pred_layer in all_node_pred_layers]
+            qry_node_acc_layers = [torch.sum(torch.eq(qry_node_pred_layer,
+                                                      qry_label.view(-1))).float() / num_qry_node
+                                                      for qry_node_pred_layer in qry_node_pred_layers]
 
             # update model, last layer has more weight
             total_loss = []
@@ -186,9 +191,9 @@ class Model:
             # logging
             self.logger.info(' {0} th iteration, edge_loss: {1:.3f}, edge_accr: {2:.3f}, node_accr: {3:.3f}'
                              .format(iter,
-                                     query_edge_loss_layers[-1],
-                                     query_edge_acc_layers[-1],
-                                     query_node_acc_layers[-1]
+                                     qry_edge_loss_layers[-1],
+                                     qry_edge_acc_layers[-1],
+                                     qry_node_acc_layers[-1]
                                      ))
 
             # evaluation
