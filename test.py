@@ -2,9 +2,8 @@ import numpy as np
 import torch
 import os
 
-b = torch.ones(5,4)
-c = torch.sum(b, -1)
+b = torch.tensor([[1,2], [2,2]])
 
-print(b/c)
+print(len(b))
 #print(c)
 #print(b[:,0,:].shape)

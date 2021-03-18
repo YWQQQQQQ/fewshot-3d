@@ -74,7 +74,10 @@ class Model:
         self.train_acc = 0
         self.val_acc = 0
         self.test_acc = 0
-
+        self.best_acc = 0
+        self.smooth_loss = []
+        self.smooth_edge_acc = []
+        self.smooth_node_acc = []
         # load pretrained model & optimizer
         self.last_iter = 0
         if args.ckpt is not None:
@@ -185,9 +188,11 @@ class Model:
 
             # update model, last layer has more weight
             total_loss = []
-            for l in range(self.num_layers):
-                total_loss += [total_loss_layers[l].view(-1) * 0.5]
-            total_loss += [total_loss_layers[-1].view(-1) * 1.0]
+            for i, total_loss_layer in enumerate(total_loss_layers):
+                if i < len(total_loss_layers)-1:
+                    total_loss += [total_loss_layer.view(-1) * 0.5]
+                else:
+                    total_loss += [total_loss_layer.view(-1) * 1.0]
             total_loss = torch.mean(torch.cat(total_loss, 0))
 
             total_loss.backward()
@@ -196,25 +201,40 @@ class Model:
             self.lr_scheduler.step()
 
             # logging
-            self.logger.info(' {0} th iteration, edge_loss: {1:.3f}, edge_accr: {2:.3f}, node_accr: {3:.3f}'
-                             .format(iter,
-                                     qry_edge_loss_layers[-1],
-                                     qry_edge_acc_layers[-1],
-                                     qry_node_acc_layers[-1]
-                                     ))
+            self.smooth_loss.append(qry_edge_loss_layers)
+            self.smooth_edge_acc.append(qry_edge_acc_layers)
+            self.smooth_node_acc.append(qry_node_acc_layers)
+
+            if iter % 10 == 0:
+                self.smooth_loss = torch.mean(torch.tensor(self.smooth_loss), 0)
+                self.smooth_edge_acc = torch.mean(torch.tensor(self.smooth_edge_acc), 0)
+                self.smooth_node_acc = torch.mean(torch.tensor(self.smooth_node_acc), 0)
+
+                for i, (loss, edge_acc, node_acc) in enumerate(zip(self.smooth_loss, self.smooth_edge_acc, self.smooth_node_acc)):
+                    self.logger.info(' {0} th iteration, edge_loss_{4}: {1:.3f}, edge_accr_{4}: {2:.3f}, node_accr_{4}: {3:.3f}'
+                                     .format(iter,
+                                             loss,
+                                             edge_acc,
+                                             node_acc,
+                                             i
+                                             ))
+                self.smooth_loss = []
+                self.smooth_edge_acc = []
+                self.smooth_node_acc = []
 
             # evaluation
 
             if iter % self.val_interval == 0:
                 self.val_acc = self.evaluate()
+                self.best_acc = max(self.best_acc, self.val_acc)
+                self.logger.info(' {0} th iteration, val_acc: {1:.3f}, best_val_acc: {2:.3f}'
+                                 .format(iter, self.val_acc, self.best_acc))
 
-                self.logger.info(' {0} th iteration, val_loss: {1:.3f}'
-                                 .format(iter, self.val_acc))
-                
-                torch.save({'iter': iter,
-                            'emb': self.embeddingNet.state_dict(),
-                            'gnn': self.graphNet.state_dict(),
-                            'optim': self.optimizer.state_dict()}, os.path.join(self.expr_folder, 'model.pt'))
+                if self.best_acc == self.val_acc:
+                    torch.save({'iter': iter,
+                                'emb': self.embeddingNet.state_dict(),
+                                'gnn': self.graphNet.state_dict(),
+                                'optim': self.optimizer.state_dict()}, os.path.join(self.expr_folder, 'model.pt'))
 
     def evaluate(self):
         # set as test mode
@@ -285,15 +305,15 @@ if __name__ == '__main__':
 
     # Fundamental setting
     parser.add_argument('--root', type=str, default='./')
-    parser.add_argument('--device', type=str, default='cuda')
+    parser.add_argument('--device', type=str, default='cpu')
     parser.add_argument('--num_ways', type=int, default='5')
-    parser.add_argument('--num_shots', type=int, default='5')
+    parser.add_argument('--num_shots', type=int, default='1')
     parser.add_argument('--num_tasks', type=int, default='5')
     #parser.add_argument('--num_queries', type=int, default='1')
     parser.add_argument('--seed', type=float, default='0')
     parser.add_argument('--train_iters', type=int, default='2000')
     parser.add_argument('--test_iters', type=int, default='20')
-    parser.add_argument('--val_interval', type=int, default='50')
+    parser.add_argument('--val_interval', type=int, default='500')
     parser.add_argument('--expr', type=str, default='experiment/')
     parser.add_argument('--ckpt', type=str, default=None)
     parser.add_argument('--mode', type=str, default='train')
@@ -307,15 +327,15 @@ if __name__ == '__main__':
     # data loading setting
     parser.add_argument('--dataset_name', type=str, default='ModelNet40')
     parser.add_argument('--test_size', type=float, default='0.2')
-    parser.add_argument('--num_points', type=int, default='128')
+    parser.add_argument('--num_points', type=int, default='64')
 
     # data transform setting
     parser.add_argument('--shift_range', type=float, default='0')
-    parser.add_argument('--x_range', type=float, default='1.57')
-    parser.add_argument('--y_range', type=float, default='1.57')
+    parser.add_argument('--x_range', type=float, default='0')
+    parser.add_argument('--y_range', type=float, default='0')
     parser.add_argument('--z_range', type=float, default='6.28')
-    parser.add_argument('--max_scale', type=float, default='1.3')
-    parser.add_argument('--min_scale', type=float, default='0.7')
+    parser.add_argument('--max_scale', type=float, default='1.1')
+    parser.add_argument('--min_scale', type=float, default='0.9')
     parser.add_argument('--sigma', type=float, default='0.01')
     parser.add_argument('--clip', type=float, default='0.02')
 
