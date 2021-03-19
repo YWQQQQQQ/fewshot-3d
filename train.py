@@ -351,8 +351,8 @@ if __name__ == '__main__':
     # GraphNetwork section
     parser.add_argument('--num_node_feats', type=int, default='64')
     parser.add_argument('--num_graph_layers', type=int, default='3')
-    parser.add_argument('--edge_p', type=float, default='0')
-    parser.add_argument('--feat_p', type=float, default='0')
+    parser.add_argument('--edge_p', type=float, default='0.5')
+    parser.add_argument('--feat_p', type=float, default='0.5')
 
     args = parser.parse_args()
 
