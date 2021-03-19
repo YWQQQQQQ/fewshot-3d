@@ -224,12 +224,13 @@ class Model:
             # evaluation
 
             if iter % self.val_interval == 0:
-                self.val_acc = self.evaluate()
-                self.best_acc = max(self.best_acc, self.val_acc)
-                self.logger.info(' {0} th iteration, val_acc: {1:.3f}, best_val_acc: {2:.3f}'
-                                 .format(iter, self.val_acc, self.best_acc))
+                val_accs = self.evaluate()
+                self.best_acc = max(self.best_acc, val_accs[-1])
+                for i, val_acc in enumerate(val_accs):
+                    self.logger.info(' {0} th iteration, val_acc_{3}: {1:.3f}, best_val_acc: {2:.3f}'
+                                     .format(iter, val_acc, self.best_acc, i))
 
-                if self.best_acc == self.val_acc:
+                if self.best_acc == val_accs[-1]:
                     torch.save({'iter': iter,
                                 'emb': self.embeddingNet.state_dict(),
                                 'gnn': self.graphNet.state_dict(),
@@ -239,8 +240,9 @@ class Model:
         # set as test mode
         self.embeddingNet.eval()
         self.graphNet.eval()
-        qry_node_preds = []
-        qry_labels = []
+        qry_node_preds = torch.zeros(self.test_iters, self.num_layers+1, self.num_tasks*self.num_queries).to(self.device)
+        qry_labels = torch.zeros(self.test_iters, self.num_tasks*self.num_queries).to(self.device)
+        qry_node_accs = []
         with torch.no_grad():
             for iter in range(self.test_iters):
                 sp_data, sp_label, _, qry_data, qry_label, _ = self.test_dataloader.get_task_batch()
@@ -278,23 +280,26 @@ class Model:
                 input_edge_feat[:, 1, -1, -1] = 0
 
                 # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
-                logit = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)[-1]
+                logit_layers = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)
 
                 # node
                 sp_label_n = sp_label.unsqueeze(1).repeat(1, self.num_queries, 1).view(
                                 self.num_tasks * self.num_queries, self.num_supports)
-                all_node_pred_layer = torch.bmm(logit[:, 0, :, :-1],
-                                                  one_hot_encode(self.num_ways, sp_label_n).to(self.device)).max(-1)[1]
-                qry_node_pred = all_node_pred_layer[:, -1]
-                qry_node_preds.append(qry_node_pred)
-                qry_labels.append(qry_label.view(-1))
-            qry_node_preds = torch.cat(qry_node_preds, 0)
-            qry_labels = torch.cat(qry_labels, 0)
 
-            num_qry_node = self.num_tasks*self.num_queries*self.test_iters
-            qry_node_acc = torch.sum(torch.eq(qry_node_preds, qry_labels)).float() / num_qry_node
+                all_node_pred_layers = [torch.bmm(logit_layer[:, 0, :, :-1],
+                                                   one_hot_encode(self.num_ways, sp_label_n).to(self.device)).max(-1)[1]
+                                                   for logit_layer in logit_layers]
 
-        return qry_node_acc
+                for i, all_node_pred_layer in enumerate(all_node_pred_layers):
+                    qry_node_preds[iter, i, :] = all_node_pred_layer[:, -1]
+                qry_labels[iter, :] = qry_label.view(-1)
+
+            num_qry_node = self.num_tasks * self.num_queries * self.test_iters
+            qry_node_accs = []
+            for i in range(self.num_layers+1):
+                qry_node_accs.append(torch.sum(torch.eq(qry_node_preds[:, i, :], qry_labels)).float() / num_qry_node)
+
+        return qry_node_accs
 
 
 
@@ -312,7 +317,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=float, default='0')
     parser.add_argument('--train_iters', type=int, default='2000')
     parser.add_argument('--test_iters', type=int, default='20')
-    parser.add_argument('--val_interval', type=int, default='500')
+    parser.add_argument('--val_interval', type=int, default='10')
     parser.add_argument('--expr', type=str, default='experiment/')
     parser.add_argument('--ckpt', type=str, default=None)
     parser.add_argument('--mode', type=str, default='train')
