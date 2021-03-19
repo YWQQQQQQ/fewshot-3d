@@ -5,7 +5,7 @@ from torch.nn import functional as F
 
 
 class EdgeUpdateNetwork(nn.Module):
-    def __init__(self, num_node_feats, device, ratio=[2, 2, 1, 1], feat_p=0):
+    def __init__(self, num_node_feats, device, ratio=[1], feat_p=0):
         super(EdgeUpdateNetwork, self).__init__()
         self.num_node_feats = num_node_feats
         self.num_feats_list = [num_node_feats * r for r in ratio]

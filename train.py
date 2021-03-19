@@ -11,7 +11,6 @@ import datetime
 import os
 import logging
 
-
 class Model:
     def __init__(self, args, partition='train'):
 
