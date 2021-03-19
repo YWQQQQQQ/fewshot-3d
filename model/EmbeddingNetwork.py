@@ -75,7 +75,7 @@ class LDGCNN(nn.Module):
         #x5_2 = F.adaptive_avg_pool1d(x5, 1).view(num_samples, -1)
         #x5 = torch.cat((x5_1, x5_2), 1)
         emb_feats = x5.max(dim=-1, keepdim=False)[0]
-        emb_feats = emb_feats / torch.sum(emb_feats, -1).unsqueeze(-1)
+        #emb_feats = emb_feats / torch.sum(emb_feats, -1).unsqueeze(-1)
         return emb_feats
 
     def get_graph_feature(self, x, k=20, idx=None):
@@ -123,7 +123,7 @@ class PointNet(nn.Module):
         x = F.relu(self.bn4(self.conv4(x)))
         x = F.relu(self.bn5(self.conv5(x)))
         emb_feats = F.adaptive_max_pool1d(x, 1).squeeze()
-        emb_feats = emb_feats / torch.sum(emb_feats, -1).unsqueeze(-1)
+        #emb_feats = emb_feats / torch.sum(emb_feats, -1).unsqueeze(-1)
         return emb_feats
 
 

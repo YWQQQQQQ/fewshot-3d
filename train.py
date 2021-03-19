@@ -187,6 +187,7 @@ class Model:
 
             # update model, last layer has more weight
             total_loss = []
+
             for i, total_loss_layer in enumerate(total_loss_layers):
                 if i < len(total_loss_layers)-1:
                     total_loss += [total_loss_layer.view(-1) * 0.5]
@@ -295,7 +296,6 @@ class Model:
                 qry_labels[iter, :] = qry_label.view(-1)
 
             num_qry_node = self.num_tasks * self.num_queries * self.test_iters
-            qry_node_accs = []
             for i in range(self.num_layers+1):
                 qry_node_accs.append(torch.sum(torch.eq(qry_node_preds[:, i, :], qry_labels)).float() / num_qry_node)
 

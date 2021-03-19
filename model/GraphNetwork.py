@@ -135,6 +135,12 @@ class GraphNetwork(nn.Module):
         self.edge_p = args.edge_p
         self.feat_p = args.feat_p
         self.device = args.device
+
+        node2edge_net = EdgeUpdateNetwork(num_node_feats=self.num_emb_feats,
+                                          device=self.device,
+                                          feat_p=self.feat_p)
+        self.add_module('node2edge_net{}'.format(0), node2edge_net)
+
         for l in range(self.num_layers):
             edge2node_net = NodeUpdateNetwork(num_in_feats=self.num_node_feats if l > 0 else self.num_emb_feats,
                                               num_node_feats=self.num_node_feats,
@@ -151,13 +157,9 @@ class GraphNetwork(nn.Module):
     def forward(self, node_feats, edge_feats):
         # for each layer
         edge_feat_list = []
-        x_i = node_feats.unsqueeze(2)
-        x_j = torch.transpose(x_i, 1, 2)
-        x_ij = torch.abs(x_i - x_j)
-        dsim_val = torch.sum(x_ij**2, -1).unsqueeze(1)
-        sim_val = 1 - dsim_val
-        logit_layer = F.normalize(torch.cat([sim_val, dsim_val], 1), p=1, dim=-1) #* merge_sum
-        edge_feat_list.append(logit_layer)
+
+        edge_feats = self._modules['node2edge_net{}'.format(0)](node_feats, edge_feats)
+        edge_feat_list.append(edge_feats)
 
         for l in range(self.num_layers):
             # (1) edge to node
