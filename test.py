@@ -4,7 +4,4 @@ from torch import nn
 import os
 
 
-m = nn.Dropout(p=0.5)
-input = torch.ones(20, 5, 5)
-output = m(input)
-print(output)
+print(np.random.choice([1,3,5,7,9], 2))
