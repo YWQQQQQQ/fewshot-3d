@@ -187,12 +187,13 @@ class Model:
 
             # update model, last layer has more weight
             total_loss = []
-
-            for i, total_loss_layer in enumerate(total_loss_layers):
-                if i < len(total_loss_layers)-1:
-                    total_loss += [total_loss_layer.view(-1) * 0.5]
-                else:
-                    total_loss += [total_loss_layer.view(-1) * 1.0]
+            #total_loss.append(total_loss_layers[0].view(-1))
+            total_loss.append(total_loss_layers[-1].view(-1))
+            #for i, total_loss_layer in enumerate(total_loss_layers):
+            #    if i < len(total_loss_layers)-1:
+            #        total_loss += [total_loss_layer.view(-1) * 0.5]
+            #    else:
+            #        total_loss += [total_loss_layer.view(-1) * 1.0]
             total_loss = torch.mean(torch.cat(total_loss, 0))
 
             total_loss.backward()
@@ -205,7 +206,7 @@ class Model:
             self.smooth_edge_acc.append(qry_edge_acc_layers)
             self.smooth_node_acc.append(qry_node_acc_layers)
 
-            if iter % 10 == 0:
+            if iter % 100 == 0:
                 self.smooth_loss = torch.mean(torch.tensor(self.smooth_loss), 0)
                 self.smooth_edge_acc = torch.mean(torch.tensor(self.smooth_edge_acc), 0)
                 self.smooth_node_acc = torch.mean(torch.tensor(self.smooth_node_acc), 0)
