@@ -83,7 +83,7 @@ class NodeUpdateNetwork(nn.Module):
         self.num_layers = len(self.num_feats_list)
         # layers
         for l in range(self.num_layers):
-            conv = nn.Conv1d(in_channels=self.num_feats_list[l - 1] if l > 0 else (self.num_in_feats),
+            conv = nn.Conv1d(in_channels=self.num_feats_list[l - 1] if l > 0 else 3*self.num_in_feats,
                              out_channels=self.num_feats_list[l],
                              kernel_size=1,
                              bias=False)
