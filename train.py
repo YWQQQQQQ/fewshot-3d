@@ -3,7 +3,7 @@ from torch import optim
 from torch import nn
 from data import DataLoder
 from model import EmbeddingNetwork
-from model.GraphNetwork import GraphNetwork
+from model import GraphNetwork, EGNN
 
 import argparse
 from utils import *
@@ -22,7 +22,8 @@ class Model:
         self.test_iters = args.test_iters
         self.val_interval = args.val_interval
         self.emb_net = args.emb_net
-
+        self.gnn_net = args.gnn_net
+        
         # fewshot task setting
         self.num_layers = args.num_graph_layers
         self.num_tasks = args.num_tasks
@@ -59,7 +60,11 @@ class Model:
             self.embeddingNet = EmbeddingNetwork.LDGCNN(args).to(self.device)
         elif self.emb_net == 'pointnet':
             self.embeddingNet = EmbeddingNetwork.PointNet(args).to(self.device)
-        self.graphNet = GraphNetwork(args).to(self.device)
+        if self.gnn_net == 'egnn':
+            self.graphNet = EGNN.GraphNetwork(args).to(self.device)
+        elif self.gnn_net == 'ours':
+            self.graphNet = GraphNetwork.GraphNetwork(args).to(self.device)
+
 
         # build optimizer
         module_params = list(self.embeddingNet.parameters()) + list(self.graphNet.parameters())
@@ -350,6 +355,7 @@ if __name__ == '__main__':
     parser.add_argument('--emb_net', type=str, default='pointnet')
 
     # GraphNetwork section
+    parser.add_argument('--gnn_net', type=str, default='ours')
     parser.add_argument('--num_node_feats', type=int, default='64')
     parser.add_argument('--num_graph_layers', type=int, default='3')
     parser.add_argument('--edge_p', type=float, default='0.5')
