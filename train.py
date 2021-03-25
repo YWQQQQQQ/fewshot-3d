@@ -194,11 +194,11 @@ class Model:
             total_loss = []
             #total_loss.append(total_loss_layers[0].view(-1))
             total_loss.append(total_loss_layers[-1].view(-1))
-            for i, total_loss_layer in enumerate(total_loss_layers):
-                if i < len(total_loss_layers)-1:
-                    total_loss += [total_loss_layer.view(-1) * 0.5]
-                else:
-                    total_loss += [total_loss_layer.view(-1) * 1.0]
+            #for i, total_loss_layer in enumerate(total_loss_layers):
+            #    if i < len(total_loss_layers)-1:
+            #        total_loss += [total_loss_layer.view(-1) * 0.5]
+            #    else:
+            #        total_loss += [total_loss_layer.view(-1) * 1.0]
             total_loss = torch.mean(torch.cat(total_loss, 0))
 
             total_loss.backward()
