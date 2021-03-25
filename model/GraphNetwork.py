@@ -5,16 +5,16 @@ from torch.nn import functional as F
 
 
 class EdgeUpdateNetwork(nn.Module):
-    def __init__(self, num_node_feats, device, ratio=[1], feat_p=0):
+    def __init__(self, num_in_feats, device, ratio=[0.5], feat_p=0):
         super(EdgeUpdateNetwork, self).__init__()
-        self.num_node_feats = num_node_feats
-        self.num_feats_list = [num_node_feats * r for r in ratio]
+        self.num_in_feats = num_in_feats
+        self.num_feats_list = [int(num_in_feats * r) for r in ratio]
         self.device = device
         self.feat_drop = feat_p
         self.num_layers = len(self.num_feats_list)
         # layers
         for l in range(self.num_layers):
-            conv = nn.Conv2d(in_channels=self.num_feats_list[l - 1] if l > 0 else self.num_node_feats,
+            conv = nn.Conv2d(in_channels=self.num_feats_list[l - 1] if l > 0 else self.num_in_feats,
                              out_channels=self.num_feats_list[l],
                              kernel_size=1,
                              bias=False)
@@ -142,20 +142,20 @@ class GraphNetwork(nn.Module):
         self.feat_p = args.feat_p
         self.device = args.device
 
-        node2edge_net = EdgeUpdateNetwork(num_node_feats=self.num_emb_feats,
+        node2edge_net = EdgeUpdateNetwork(num_in_feats=self.num_emb_feats,
                                           device=self.device,
                                           feat_p=self.feat_p)
 
         self.add_module('node2edge_net{}'.format(0), node2edge_net)
 
         for l in range(self.num_layers):
-            edge2node_net = NodeUpdateNetwork(num_in_feats=self.num_node_feats if l > 0 else self.num_emb_feats,
+            edge2node_net = NodeUpdateNetwork(num_in_feats=self.num_emb_feats+self.num_node_feats if l>0 else self.num_emb_feats,
                                               num_node_feats=self.num_node_feats,
                                               device=self.device,
                                               feat_p=self.feat_p,
                                               edge_p=self.edge_p)
 
-            node2edge_net = EdgeUpdateNetwork(num_node_feats=self.num_node_feats,
+            node2edge_net = EdgeUpdateNetwork(num_in_feats=self.num_emb_feats+self.num_node_feats,
                                               device=self.device,
                                               feat_p=self.feat_p)
 
@@ -166,14 +166,15 @@ class GraphNetwork(nn.Module):
         # for each layer
         edge_feat_list = []
 
-        edge_feats = self._modules['node2edge_net{}'.format(0)](node_feats, edge_feats)
+        ori_node_feats = node_feats
+        edge_feats = self._modules['node2edge_net{}'.format(0)](ori_node_feats, edge_feats)
         edge_feat_list.append(edge_feats)
 
-        new_node_feats = 0
         for l in range(self.num_layers):
             # (1) edge to node
-            new_node_feats = self._modules['edge2node_net{}'.format(l+1)](node_feats, edge_feats)
-            node_feats = node_feats + new_node_feats
+            node_feats = self._modules['edge2node_net{}'.format(l+1)](node_feats, edge_feats)
+            node_feats = torch.cat([ori_node_feats, node_feats], -1)
+
             # (2) node to edge
             edge_feats = self._modules['node2edge_net{}'.format(l+1)](node_feats, edge_feats)
 
@@ -190,17 +191,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Point Cloud Classification with Few-shot Learning')
     parser.add_argument('--dataset_root', type=str, default='../')
     parser.add_argument('--device', type=str, default='cpu')
-    parser.add_argument('--num_emb_feats', type=int, default='512')
+    parser.add_argument('--num_emb_feats', type=int, default='64')
 
-    parser.add_argument('--num_node_feats', type=int, default='512')
+    parser.add_argument('--num_node_feats', type=int, default='128')
     parser.add_argument('--num_graph_layers', type=int, default='3')
     parser.add_argument('--feat_p', type=float, default='0')
     parser.add_argument('--edge_p', type=float, default='0')
 
     args = parser.parse_args()
 
-    nodes = torch.zeros((4,6,512))
-    edges = torch.zeros((4,2,6,6))
+    nodes = torch.ones((4,6,64))
+    edges = torch.ones((4,2,6,6))
     gnn = GraphNetwork(args)
     result = gnn(nodes, edges)
     print(result[0].shape)
