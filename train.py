@@ -23,9 +23,9 @@ class Model:
         self.val_interval = args.val_interval
         self.emb_net = args.emb_net
         self.gnn_net = args.gnn_net
-        
+
         # fewshot task setting
-        self.num_layers = args.num_graph_layers
+        self.num_layers = args.num_graph_layers if self.gnn_net == 'egnn' else args.num_graph_layers+1
         self.num_tasks = args.num_tasks
         self.num_points = args.num_points
         self.num_emb_feats = args.num_emb_feats
@@ -194,11 +194,11 @@ class Model:
             total_loss = []
             #total_loss.append(total_loss_layers[0].view(-1))
             total_loss.append(total_loss_layers[-1].view(-1))
-            #for i, total_loss_layer in enumerate(total_loss_layers):
-            #    if i < len(total_loss_layers)-1:
-            #        total_loss += [total_loss_layer.view(-1) * 0.5]
-            #    else:
-            #        total_loss += [total_loss_layer.view(-1) * 1.0]
+            for i, total_loss_layer in enumerate(total_loss_layers):
+                if i < len(total_loss_layers)-1:
+                    total_loss += [total_loss_layer.view(-1) * 0.5]
+                else:
+                    total_loss += [total_loss_layer.view(-1) * 1.0]
             total_loss = torch.mean(torch.cat(total_loss, 0))
 
             total_loss.backward()
@@ -247,7 +247,7 @@ class Model:
         # set as test mode
         self.embeddingNet.eval()
         self.graphNet.eval()
-        qry_node_preds = torch.zeros(self.test_iters, self.num_layers+1, self.num_tasks*self.num_queries).to(self.device)
+        qry_node_preds = torch.zeros(self.test_iters, self.num_layers, self.num_tasks*self.num_queries).to(self.device)
         qry_labels = torch.zeros(self.test_iters, self.num_tasks*self.num_queries).to(self.device)
         qry_node_accs = []
         with torch.no_grad():
@@ -302,7 +302,7 @@ class Model:
                 qry_labels[iter, :] = qry_label.view(-1)
 
             num_qry_node = self.num_tasks * self.num_queries * self.test_iters
-            for i in range(self.num_layers+1):
+            for i in range(self.num_layers):
                 qry_node_accs.append(torch.sum(torch.eq(qry_node_preds[:, i, :], qry_labels)).float() / num_qry_node)
 
         return qry_node_accs

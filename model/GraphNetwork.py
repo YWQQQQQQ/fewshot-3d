@@ -169,15 +169,16 @@ class GraphNetwork(nn.Module):
         edge_feats = self._modules['node2edge_net{}'.format(0)](node_feats, edge_feats)
         edge_feat_list.append(edge_feats)
 
+        new_node_feats = 0
         for l in range(self.num_layers):
             # (1) edge to node
-            node_feats = self._modules['edge2node_net{}'.format(l+1)](node_feats, edge_feats)
+            new_node_feats = self._modules['edge2node_net{}'.format(l+1)](node_feats, edge_feats)
+            node_feats += new_node_feats
             # (2) node to edge
             edge_feats = self._modules['node2edge_net{}'.format(l+1)](node_feats, edge_feats)
 
 
             edge_feat_list.append(edge_feats)
-
 
         return edge_feat_list
 
@@ -191,7 +192,7 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cpu')
     parser.add_argument('--num_emb_feats', type=int, default='512')
 
-    parser.add_argument('--num_node_feats', type=int, default='1024')
+    parser.add_argument('--num_node_feats', type=int, default='512')
     parser.add_argument('--num_graph_layers', type=int, default='3')
     parser.add_argument('--feat_p', type=float, default='0')
     parser.add_argument('--edge_p', type=float, default='0')
