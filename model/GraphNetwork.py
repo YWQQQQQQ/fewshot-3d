@@ -126,7 +126,8 @@ class NodeUpdateNetwork(nn.Module):
             node_feats = self._modules['conv{}'.format(l+1)](node_feats)
             node_feats = self._modules['bn{}'.format(l+1)](node_feats)
             node_feats = self._modules['l_relu{}'.format(l+1)](node_feats)
-
+            if self.feat_drop > 0:
+                node_feats = self._modules['drop{}'.format(l+1)](node_feats)
         node_feats = node_feats.transpose(1, 2)
         return node_feats
 
