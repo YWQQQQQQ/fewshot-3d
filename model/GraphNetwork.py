@@ -149,14 +149,16 @@ class GraphNetwork(nn.Module):
         self.add_module('node2edge_net{}'.format(0), node2edge_net)
 
         for l in range(self.num_layers):
-            edge2node_net = NodeUpdateNetwork(num_in_feats=self.num_emb_feats+self.num_node_feats if l>0 else self.num_emb_feats,
+            edge2node_net = NodeUpdateNetwork(#num_in_feats=self.num_emb_feats+self.num_node_feats if l>0 else self.num_emb_feats,
+                                              num_in_feats=self.num_node_feats if l > 0 else self.num_emb_feats,
                                               num_node_feats=self.num_node_feats,
                                               device=self.device,
                                               #ratio=[2,1] if l>0 else [0.5,1],
                                               feat_p=self.feat_p,
                                               edge_p=self.edge_p)
 
-            node2edge_net = EdgeUpdateNetwork(num_in_feats=self.num_emb_feats+self.num_node_feats,
+            node2edge_net = EdgeUpdateNetwork(#num_in_feats=self.num_emb_feats+self.num_node_feats,
+                                              num_in_feats=self.num_node_feats,
                                               device=self.device,
                                               feat_p=self.feat_p)
 
@@ -167,14 +169,14 @@ class GraphNetwork(nn.Module):
         # for each layer
         edge_feat_list = []
 
-        ori_node_feats = node_feats
-        edge_feats = self._modules['node2edge_net{}'.format(0)](ori_node_feats, edge_feats)
+        #ori_node_feats = node_feats
+        edge_feats = self._modules['node2edge_net{}'.format(0)](node_feats, edge_feats)
         edge_feat_list.append(edge_feats)
 
         for l in range(self.num_layers):
             # (1) edge to node
             node_feats = self._modules['edge2node_net{}'.format(l+1)](node_feats, edge_feats)
-            node_feats = torch.cat([ori_node_feats, node_feats], -1)
+            #node_feats = torch.cat([ori_node_feats, node_feats], -1)
 
             # (2) node to edge
             edge_feats = self._modules['node2edge_net{}'.format(l+1)](node_feats, edge_feats)
