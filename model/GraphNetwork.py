@@ -78,7 +78,7 @@ class NodeUpdateNetwork(nn.Module):
         super(NodeUpdateNetwork, self).__init__()
         self.num_in_feats = num_in_feats
         self.num_node_feats = num_node_feats
-        self.num_feats_list = [num_node_feats * r for r in ratio]
+        self.num_feats_list = [int(num_node_feats * r) for r in ratio]
         self.device = device
         self.edge_drop = edge_p
         self.feat_drop = feat_p
@@ -152,6 +152,7 @@ class GraphNetwork(nn.Module):
             edge2node_net = NodeUpdateNetwork(num_in_feats=self.num_emb_feats+self.num_node_feats if l>0 else self.num_emb_feats,
                                               num_node_feats=self.num_node_feats,
                                               device=self.device,
+                                              #ratio=[2,1] if l>0 else [0.5,1],
                                               feat_p=self.feat_p,
                                               edge_p=self.edge_p)
 
