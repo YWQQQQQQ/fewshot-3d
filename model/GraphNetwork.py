@@ -84,7 +84,7 @@ class NodeUpdateNetwork(nn.Module):
         self.feat_drop = feat_p
         self.num_layers = len(self.num_feats_list)
 
-        self.move_step = Variable(torch.tensor(0.3), requires_grad=True)
+        self.move_step = Variable(torch.tensor(0.3), requires_grad=True).to(self.device)
         # layers
         if self.edge_drop > 0:
             drop = nn.Dropout(p=self.edge_drop)
