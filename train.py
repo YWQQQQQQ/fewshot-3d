@@ -78,7 +78,7 @@ class Model:
         self.train_acc = 0
         self.val_acc = 0
         self.test_acc = 0
-        self.best_acc = 0
+        self.best_accs = [0 for _ in range(self.num_layers)] if self.gnn_net == 'egnn' else [0 for _ in range(self.num_layers+1)]
         self.smooth_loss = []
         self.smooth_edge_acc = []
         self.smooth_node_acc = []
@@ -224,6 +224,8 @@ class Model:
                                              node_acc,
                                              i
                                              ))
+                self.logger.info(' {0} th iteration, current_lr: {1}'
+                                 .format(iter, self.optimizer.param_groups[0]['lr']))
                 self.smooth_loss = []
                 self.smooth_edge_acc = []
                 self.smooth_node_acc = []
@@ -232,12 +234,12 @@ class Model:
 
             if iter % self.val_interval == 0:
                 val_accs = self.evaluate()
-                self.best_acc = max(self.best_acc, val_accs[-1])
-                for i, val_acc in enumerate(val_accs):
+                for i, (val_acc, best_acc) in enumerate(zip(val_accs, self.best_accs)):
+                    best_acc = max(best_acc, val_acc)
                     self.logger.info(' {0} th iteration, val_acc_{3}: {1:.3f}, best_val_acc: {2:.3f}'
-                                     .format(iter, val_acc, self.best_acc, i))
+                                     .format(iter, val_acc, best_acc, i))
 
-                if self.best_acc == val_accs[-1]:
+                if self.best_accs[-1] == val_accs[-1]:
                     torch.save({'iter': iter,
                                 'emb': self.embeddingNet.state_dict(),
                                 'gnn': self.graphNet.state_dict(),
@@ -331,7 +333,7 @@ if __name__ == '__main__':
     # hyper-parameter setting
     parser.add_argument('--lr', type=float, default='1e-3')
     parser.add_argument('--weight_decay', type=float, default='1e-6')
-    parser.add_argument('--dec_lr', type=float, default='500')
+    parser.add_argument('--dec_lr', type=float, default='20')
 
 
     # data loading setting
