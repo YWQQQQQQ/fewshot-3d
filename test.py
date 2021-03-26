@@ -2,6 +2,12 @@ import numpy as np
 import torch
 from torch import nn
 import os
+from torch.autograd import Variable
 
+x=Variable(torch.tensor(0.1), requires_grad=True)
+y=x*x+2
+print(y)
 
-print(np.random.choice([1,3,5,7,9], 2))
+y.backward()
+print(x.grad, '\n', x.grad_fn)
+

@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from torch import nn
 from torch.nn import functional as F
-
+from torch.autograd import Variable
 
 class EdgeUpdateNetwork(nn.Module):
     def __init__(self, num_in_feats, device, ratio=[0.5], feat_p=0):
@@ -83,6 +83,8 @@ class NodeUpdateNetwork(nn.Module):
         self.edge_drop = edge_p
         self.feat_drop = feat_p
         self.num_layers = len(self.num_feats_list)
+
+        self.move_step = Variable(torch.tensor(0.3), requires_grad=True)
         # layers
         if self.edge_drop > 0:
             drop = nn.Dropout(p=self.edge_drop)
@@ -119,7 +121,7 @@ class NodeUpdateNetwork(nn.Module):
         aggr_feats = torch.bmm(torch.cat(torch.split(edge_feats, 1, 1), 2).squeeze(1), node_feats)
 
         #node_feats = torch.cat([node_feats, torch.cat(aggr_feats.split(num_samples, 1), -1)], -1).transpose(1, 2)
-        node_feats = node_feats + 0.3*aggr_feats[:, :num_samples, :] - 0.3*aggr_feats[:, num_samples:, :]
+        node_feats = node_feats + self.move_step*(aggr_feats[:, :num_samples, :] - aggr_feats[:, num_samples:, :])
         node_feats = node_feats.transpose(1,2)
         # non-linear transform
         for l in range(self.num_layers):
