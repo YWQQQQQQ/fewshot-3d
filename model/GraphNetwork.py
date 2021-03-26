@@ -91,7 +91,7 @@ class NodeUpdateNetwork(nn.Module):
             drop = nn.Dropout(p=self.edge_drop)
             self.add_module('edge_drop0', drop)
         for l in range(self.num_layers):
-            conv = nn.Conv1d(in_channels=self.num_feats_list[l - 1] if l > 0 else (self.num_in_feats),
+            conv = nn.Conv1d(in_channels=self.num_feats_list[l - 1] if l > 0 else 3*(self.num_in_feats),
                              out_channels=self.num_feats_list[l],
                              kernel_size=1,
                              bias=False)
@@ -125,41 +125,21 @@ class NodeUpdateNetwork(nn.Module):
 
         # compute attention and aggregate
         aggr_feats = torch.bmm(torch.cat(torch.split(edge_feats, 1, 1), 2).squeeze(1), node_feats)
-        sim_feats, dsim_feats = torch.split(aggr_feats, num_samples, 1)
-        sim_feats = sim_feats.transpose(1,2)
-        dsim_feats = dsim_feats.transpose(1,2)
-
-        node_feats = node_feats.transpose(1,2)
+        aggr_feats = torch.cat(torch.split(aggr_feats, num_samples, 1), -1)
+        node_feats = torch.cat([node_feats, aggr_feats], -1).transpose(1,2)
 
         #node_feats = torch.cat([node_feats, torch.cat(aggr_feats.split(num_samples, 1), -1)], -1).transpose(1, 2)
         #node_feats = node_feats + self.move_step*(aggr_feats[:, :num_samples, :] - aggr_feats[:, num_samples:, :])
         #node_feats = node_feats.transpose(1,2)
         # non-linear transform
         for l in range(self.num_layers):
-            node_feats = self._modules['conv{}'.format(l + 1)](node_feats)
-            node_feats = self._modules['bn{}'.format(l + 1)](node_feats)
-            node_feats = self._modules['l_relu{}'.format(l + 1)](node_feats)
+            node_feats = self._modules['conv{}'.format(l+1)](node_feats)
+            node_feats = self._modules['bn{}'.format(l+1)](node_feats)
+            node_feats = self._modules['l_relu{}'.format(l+1)](node_feats)
             if self.dropout > 0:
                 node_feats = self._modules['drop{}'.format(l+1)](node_feats)
 
-            sim_feats = self._modules['conv{}'.format(l+1)](sim_feats)
-            sim_feats = self._modules['bn{}'.format(l+1)](sim_feats)
-            sim_feats = self._modules['l_relu{}'.format(l+1)](sim_feats)
-            if self.dropout > 0:
-                sim_feats = self._modules['drop{}'.format(l+1)](sim_feats)
-
-            dsim_feats = self._modules['conv{}'.format(l + 1)](dsim_feats)
-            dsim_feats = self._modules['bn{}'.format(l + 1)](dsim_feats)
-            dsim_feats = self._modules['l_relu{}'.format(l + 1)](dsim_feats)
-            if self.dropout > 0:
-                dsim_feats = self._modules['drop{}'.format(l+1)](dsim_feats)
-
-        if self.feat_drop > 0:
-            sim_feats = self._modules['feat_drop0'](sim_feats)
-        if self.feat_drop > 0:
-            dsim_feats = self._modules['feat_drop0'](dsim_feats)
-
-        node_feats = node_feats + self.move_step * (sim_feats - dsim_feats)
+        #node_feats = node_feats + self.move_step * (sim_feats - dsim_feats)
         node_feats = node_feats.transpose(1,2)
         return node_feats
 

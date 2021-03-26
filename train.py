@@ -234,10 +234,10 @@ class Model:
 
             if iter % self.val_interval == 0:
                 val_accs = self.evaluate()
-                for i, (val_acc, best_acc) in enumerate(zip(val_accs, self.best_accs)):
-                    best_acc = max(best_acc, val_acc)
+                for i, val_acc in enumerate(val_accs):
+                    self.best_accs[i] = max(self.best_accs[i], val_acc)
                     self.logger.info(' {0} th iteration, val_acc_{3}: {1:.3f}, best_val_acc: {2:.3f}'
-                                     .format(iter, val_acc, best_acc, i))
+                                     .format(iter, val_acc, self.best_accs[i], i))
 
                 if self.best_accs[-1] == val_accs[-1]:
                     torch.save({'iter': iter,
