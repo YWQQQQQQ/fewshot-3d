@@ -9,6 +9,7 @@ from utils import *
 import datetime
 import os
 import logging
+from torch.nn import functional as F
 
 class Model:
     def __init__(self, args, partition='train'):
@@ -147,9 +148,11 @@ class Model:
             # qry to itself
             input_edge_feat[:, 0, -1, -1] = 1
             input_edge_feat[:, 1, -1, -1] = 0
+            input_edge_feat = input_edge_feat.unsqueeze(-1).repeat(1,1,1,1,self.num_emb_feats)
 
             # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
             logit_layers = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)
+            logit_layers = [F.normalize(torch.sum(logit_layer, -1), p=1, dim=-1) for logit_layer in logit_layers]
 
             # compute loss
             # full_edge_loss_layers: num_layers, num_tasks*num_qry, num_sp+1, num_sp+1
@@ -326,6 +329,8 @@ class Model:
 
                 # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
                 logit_layers = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)
+                logit_layers = [F.normalize(torch.sum(logit_layer, -1), p=1, dim=-1) for logit_layer in logit_layers]
+
                 # node
                 sp_label_n = sp_label.unsqueeze(1).repeat(1, self.num_queries, 1).view(
                                 self.num_tasks * self.num_queries, self.num_supports)

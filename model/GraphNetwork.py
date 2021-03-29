@@ -4,8 +4,9 @@ from torch import nn
 from torch.nn import functional as F
 from torch.autograd import Variable
 
+
 class EdgeUpdateNetwork(nn.Module):
-    def __init__(self, num_in_feats, device, ratio=[0.5], dropout=0):
+    def __init__(self, num_in_feats, device, ratio=[2, 1], dropout=0):
         super(EdgeUpdateNetwork, self).__init__()
         self.num_in_feats = num_in_feats
         self.num_feats_list = [int(num_in_feats * r) for r in ratio]
@@ -29,12 +30,12 @@ class EdgeUpdateNetwork(nn.Module):
                 drop = nn.Dropout2d(p=self.dropout)
                 self.add_module('drop{}'.format(l+1), drop)
 
-        else:
-            conv_out = nn.Conv2d(in_channels=self.num_feats_list[-1],
-                                 out_channels=1,
-                                 kernel_size=1,
-                                 bias=False)
-            self.add_module('conv_out', conv_out)
+        #else:
+        #    conv_out = nn.Conv2d(in_channels=self.num_feats_list[-1],
+        #                         out_channels=1,
+        #                         kernel_size=1,
+        #                         bias=False)
+        #    self.add_module('conv_out', conv_out)
 
     def forward(self, node_feats, edge_feats):
         # node_feats: num_tasks*num_queries, num_supports+1, num_features
@@ -52,23 +53,23 @@ class EdgeUpdateNetwork(nn.Module):
             x_ij = self._modules['l_relu{}'.format(l+1)](x_ij)
             if self.dropout > 0:
                 x_ij = self._modules['drop{}'.format(l+1)](x_ij)
-        else:
-            x_ij = self._modules['conv_out'](x_ij)
+        #else:
+        #    x_ij = self._modules['conv_out'](x_ij)
 
-        dsim_val = torch.sigmoid(x_ij)
+        dsim_val = torch.sigmoid(x_ij).unsqueeze(-1).transpose(1, 4)
         sim_val = 1.0 - dsim_val
 
         #diag_mask = 1.0 - torch.eye(num_samples).unsqueeze(0).unsqueeze(0).repeat(num_tasks, 2, 1, 1).to(self.device)
         #edge_feats = edge_feats * diag_mask
         #merge_sum = torch.sum(edge_feats, -1, True)
         # set diagonal as zero and normalize
-        edge_feats = F.normalize(torch.cat([sim_val, dsim_val], 1) * edge_feats, p=1, dim=-1) #* merge_sum
-        force_edge_feat = torch.eye(num_samples).unsqueeze(0).repeat(num_tasks, 1, 1).bool()
-        edge_feats[:,0,:,:][force_edge_feat] = 1
-        edge_feats[:,1,:,:][force_edge_feat] = 0
+        edge_feats = torch.cat([sim_val, dsim_val], 1) #* merge_sum
+        force_edge_feat = torch.eye(num_samples).unsqueeze(0).unsqueeze(-1).repeat(num_tasks, 1, 1, num_feats).bool()
+        edge_feats[:,0,:,:,:][force_edge_feat] = 1
+        edge_feats[:,1,:,:,:][force_edge_feat] = 0
 
         edge_feats = edge_feats + 1e-6  # Prevent division by zero
-        edge_feats = edge_feats / torch.sum(edge_feats, dim=1).unsqueeze(1).repeat(1, 2, 1, 1)
+        edge_feats = edge_feats / torch.sum(edge_feats, dim=1).unsqueeze(1).repeat(1, 2, 1, 1, 1)
 
         return edge_feats
 
@@ -119,17 +120,20 @@ class NodeUpdateNetwork(nn.Module):
         diag_mask = 1.0 - torch.eye(num_samples).unsqueeze(0).repeat(num_batches, 1, 1).to(self.device)
         if self.edge_drop > 0:
             diag_mask = self._modules['edge_drop0'](diag_mask)
-        diag_mask = diag_mask.unsqueeze(1).repeat(1, 2, 1, 1)
+        diag_mask = diag_mask.unsqueeze(1).unsqueeze(-1).repeat(1, 2, 1, 1, num_feats)
         # set diagonal as zero and normalize
         edge_feats = edge_feats * diag_mask
 
         # compute attention and aggregate
-        aggr_feats = torch.bmm(torch.cat(torch.split(edge_feats, 1, 1), 2).squeeze(1), node_feats)
+        aggr_feats = node_feats.unsqueeze(1).unsqueeze(1).repeat(1, 2, num_samples, 1, 1)
+        aggr_feats = torch.sum(edge_feats*aggr_feats, dim=2)
+
+        #aggr_feats = torch.bmm(torch.cat(torch.split(edge_feats, 1, 1), 2).squeeze(1), node_feats)
         #aggr_feats = torch.cat(torch.split(aggr_feats, num_samples, 1), -1)
         #node_feats = torch.cat([node_feats, aggr_feats], -1).transpose(1,2)
 
         #node_feats = torch.cat([node_feats, torch.cat(aggr_feats.split(num_samples, 1), -1)], -1).transpose(1, 2)
-        node_feats = node_feats + self.move_step*(aggr_feats[:, :num_samples, :] - aggr_feats[:, num_samples:, :])
+        node_feats = node_feats + self.move_step*(aggr_feats[:, 0, :, :,] - aggr_feats[:, 1, :, :])
         node_feats = node_feats.transpose(1,2)
         # non-linear transform
         for l in range(self.num_layers):
