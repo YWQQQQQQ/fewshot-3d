@@ -163,9 +163,11 @@ class Model:
             
             # weighted edge loss for balancing pos/neg
             num_pos_sp_edge = torch.sum(full_edge[:, 0]*self.sp_edge_mask*self.evaluation_mask)
-            pos_sp_edge_loss_layers = [torch.sum(sp_edge_loss_layer*full_edge[:, 0]) / num_pos_sp_edge
+            if num_pos_sp_edge > 0:
+                pos_sp_edge_loss_layers = [torch.sum(sp_edge_loss_layer*full_edge[:, 0]) / num_pos_sp_edge
                                           for sp_edge_loss_layer in sp_edge_loss_layers]
-
+            else:
+                pos_sp_edge_loss_layers = [0 for _ in range(self.num_layers)]
             num_neg_sp_edge = torch.sum(full_edge[:, 1]*self.sp_edge_mask*self.evaluation_mask)
             neg_sp_edge_loss_layers = [torch.sum(sp_edge_loss_layer*full_edge[:, 1]) / num_neg_sp_edge
                                           for sp_edge_loss_layer in sp_edge_loss_layers]
@@ -182,11 +184,14 @@ class Model:
                                     (pos_sp_edge_loss_layer, neg_sp_edge_loss_layer) in 
                                     zip(pos_sp_edge_loss_layers, neg_sp_edge_loss_layers)]
 
+            # last layer is not important
+            sp_edge_loss_layers[-1] = 0
+
             qry_edge_loss_layers = [pos_qry_edge_loss_layer + neg_qry_edge_loss_layer for
                                       (pos_qry_edge_loss_layer, neg_qry_edge_loss_layer) in
                                       zip(pos_qry_edge_loss_layers, neg_qry_edge_loss_layers)]
             
-            total_loss_layers = [sp_edge_loss_layer + 2*qry_edge_loss_layer 
+            total_loss_layers = [sp_edge_loss_layer + qry_edge_loss_layer 
                         for sp_edge_loss_layer, qry_edge_loss_layer in zip(sp_edge_loss_layers, qry_edge_loss_layers) ]
 
             # compute accuracy
@@ -256,7 +261,7 @@ class Model:
 
                 self.logger.info(' {0} th iteration, avg_node_accr: {1:.3f}'
                                  .format(iter, self.smooth_avg_node_acc))
-                self.smooth_qry_loss = []
+                self.smooth_sp_loss = []
                 self.smooth_qry_loss = []
                 self.smooth_edge_acc = []
                 self.smooth_node_acc = []
@@ -321,15 +326,17 @@ class Model:
 
                 # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
                 logit_layers = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)
-                #print(logit_layers[0][0,0,:,:])
-                #print()
-                #print(logit_layers[-1][0,0,:,:])
-                #input()
                 # node
                 sp_label_n = sp_label.unsqueeze(1).repeat(1, self.num_queries, 1).view(
                                 self.num_tasks * self.num_queries, self.num_supports)
                 
                 
+                #print(logit_layers[0][0,0,:,:])
+                #print()
+                #print(logit_layers[-1][0,0,:,:])
+                #print()
+                #print(qry_label.view(-1)[0])
+                #input()
                 sum_logit_layer = sum(logit_layers)
                 all_node_pred_layer = torch.bmm(sum_logit_layer[:,0,:,:-1], 
                                                 one_hot_encode(self.num_ways, sp_label_n).to(self.device)
