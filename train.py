@@ -4,7 +4,6 @@ from torch import nn
 from data import DataLoder
 from model import EmbeddingNetwork
 from model import GraphNetwork, EGNN
-
 import argparse
 from utils import *
 import datetime
@@ -79,7 +78,8 @@ class Model:
         self.val_acc = 0
         self.test_acc = 0
         self.best_accs = [0 for _ in range(self.num_layers+1)] if self.gnn_net == 'egnn' else [0 for _ in range(self.num_layers+2)]
-        self.smooth_loss = []
+        self.smooth_qry_loss = []
+        self.smooth_sp_loss = []
         self.smooth_edge_acc = []
         self.smooth_node_acc = []
         self.smooth_avg_node_acc = []
@@ -88,6 +88,7 @@ class Model:
         if args.ckpt is not None:
             model_ckpt = os.path.join(args.expr, args.ckpt, 'model.pt')
             if os.path.exists(model_ckpt):
+                print('exist!')
                 state = torch.load(model_ckpt)
 
                 self.embeddingNet.load_state_dict(state['emb'])
@@ -154,11 +155,21 @@ class Model:
             # full_edge_loss_layers: num_layers, num_tasks*num_qry, num_sp+1, num_sp+1
             full_edge_loss_layers = [self.edge_loss(logit_layer[:, 0], full_edge[:, 0]) for
                                      logit_layer in logit_layers]
-
+            
+            sp_edge_loss_layers = [full_edge_loss_layer*self.sp_edge_mask*self.evaluation_mask 
+                                    for full_edge_loss_layer in full_edge_loss_layers]
             qry_edge_loss_layers = [full_edge_loss_layer*self.qry_edge_mask*self.evaluation_mask
                                     for full_edge_loss_layer in full_edge_loss_layers]
-
+            
             # weighted edge loss for balancing pos/neg
+            num_pos_sp_edge = torch.sum(full_edge[:, 0]*self.sp_edge_mask*self.evaluation_mask)
+            pos_sp_edge_loss_layers = [torch.sum(sp_edge_loss_layer*full_edge[:, 0]) / num_pos_sp_edge
+                                          for sp_edge_loss_layer in sp_edge_loss_layers]
+
+            num_neg_sp_edge = torch.sum(full_edge[:, 1]*self.sp_edge_mask*self.evaluation_mask)
+            neg_sp_edge_loss_layers = [torch.sum(sp_edge_loss_layer*full_edge[:, 1]) / num_neg_sp_edge
+                                          for sp_edge_loss_layer in sp_edge_loss_layers]
+
             num_pos_qry_edge = torch.sum(full_edge[:, 0]*self.qry_edge_mask*self.evaluation_mask)
             pos_qry_edge_loss_layers = [torch.sum(qry_edge_loss_layer*full_edge[:, 0]) / num_pos_qry_edge
                                           for qry_edge_loss_layer in qry_edge_loss_layers]
@@ -166,12 +177,17 @@ class Model:
             num_neg_qry_edge = torch.sum(full_edge[:, 1]*self.qry_edge_mask*self.evaluation_mask)
             neg_qry_edge_loss_layers = [torch.sum(qry_edge_loss_layer*full_edge[:, 1]) / num_neg_qry_edge
                                           for qry_edge_loss_layer in qry_edge_loss_layers]
+            
+            sp_edge_loss_layers = [pos_sp_edge_loss_layer + neg_sp_edge_loss_layer for 
+                                    (pos_sp_edge_loss_layer, neg_sp_edge_loss_layer) in 
+                                    zip(pos_sp_edge_loss_layers, neg_sp_edge_loss_layers)]
 
             qry_edge_loss_layers = [pos_qry_edge_loss_layer + neg_qry_edge_loss_layer for
                                       (pos_qry_edge_loss_layer, neg_qry_edge_loss_layer) in
                                       zip(pos_qry_edge_loss_layers, neg_qry_edge_loss_layers)]
-
-            total_loss_layers = qry_edge_loss_layers
+            
+            total_loss_layers = [sp_edge_loss_layer + 2*qry_edge_loss_layer 
+                        for sp_edge_loss_layer, qry_edge_loss_layer in zip(sp_edge_loss_layers, qry_edge_loss_layers) ]
 
             # compute accuracy
             # edge
@@ -215,21 +231,24 @@ class Model:
             self.lr_scheduler.step()
 
             # logging
-            self.smooth_loss.append(qry_edge_loss_layers)
+            self.smooth_qry_loss.append(qry_edge_loss_layers)
+            self.smooth_sp_loss.append(sp_edge_loss_layers)
             self.smooth_edge_acc.append(qry_edge_acc_layers)
             self.smooth_node_acc.append(qry_node_acc_layers)
             self.smooth_avg_node_acc.append(qry_node_acc_layer)
 
             if iter % 100 == 0:
-                self.smooth_loss = torch.mean(torch.tensor(self.smooth_loss), 0)
+                self.smooth_qry_loss = torch.mean(torch.tensor(self.smooth_qry_loss), 0)
+                self.smooth_sp_loss = torch.mean(torch.tensor(self.smooth_sp_loss), 0)
                 self.smooth_edge_acc = torch.mean(torch.tensor(self.smooth_edge_acc), 0)
                 self.smooth_node_acc = torch.mean(torch.tensor(self.smooth_node_acc), 0)
                 self.smooth_avg_node_acc = torch.mean(torch.tensor(self.smooth_avg_node_acc))
 
-                for i, (loss, edge_acc, node_acc) in enumerate(zip(self.smooth_loss, self.smooth_edge_acc, self.smooth_node_acc)):
-                    self.logger.info(' {0} th iteration, edge_loss_{4}: {1:.3f}, edge_accr_{4}: {2:.3f}, node_accr_{4}: {3:.3f}'
+                for i, (sp_loss, qry_loss, edge_acc, node_acc) in enumerate(zip(self.smooth_sp_loss, self.smooth_qry_loss, self.smooth_edge_acc, self.smooth_node_acc)):
+                    self.logger.info(' {0} th iteration, sp_loss_{5}: {1:.3f},edge_loss_{5}: {2:.3f}, edge_accr_{5}: {3:.3f}, node_accr_{5}: {4:.3f}'
                                      .format(iter,
-                                             loss,
+                                             sp_loss,
+                                             qry_loss,
                                              edge_acc,
                                              node_acc,
                                              i
@@ -237,7 +256,8 @@ class Model:
 
                 self.logger.info(' {0} th iteration, avg_node_accr: {1:.3f}'
                                  .format(iter, self.smooth_avg_node_acc))
-                self.smooth_loss = []
+                self.smooth_qry_loss = []
+                self.smooth_qry_loss = []
                 self.smooth_edge_acc = []
                 self.smooth_node_acc = []
                 self.smooth_avg_node_acc = []
@@ -250,11 +270,10 @@ class Model:
                     self.logger.info(' {0} th iteration, val_acc_{3}: {1:.3f}, best_val_acc: {2:.3f}'
                                      .format(iter, val_acc, self.best_accs[i], i))
 
-                if self.best_accs[-1] == val_accs[-1]:
-                    torch.save({'iter': iter,
-                                'emb': self.embeddingNet.state_dict(),
-                                'gnn': self.graphNet.state_dict(),
-                                'optim': self.optimizer.state_dict()}, os.path.join(self.expr_folder, 'model.pt'))
+                torch.save({'iter': iter,
+                            'emb': self.embeddingNet.state_dict(),
+                            'gnn': self.graphNet.state_dict(),
+                            'optim': self.optimizer.state_dict()}, os.path.join(self.expr_folder, 'model.pt'))
 
     def evaluate(self):
         # set as test mode
@@ -302,7 +321,10 @@ class Model:
 
                 # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
                 logit_layers = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)
-
+                #print(logit_layers[0][0,0,:,:])
+                #print()
+                #print(logit_layers[-1][0,0,:,:])
+                #input()
                 # node
                 sp_label_n = sp_label.unsqueeze(1).repeat(1, self.num_queries, 1).view(
                                 self.num_tasks * self.num_queries, self.num_supports)
