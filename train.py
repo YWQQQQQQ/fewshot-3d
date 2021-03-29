@@ -78,10 +78,11 @@ class Model:
         self.train_acc = 0
         self.val_acc = 0
         self.test_acc = 0
-        self.best_accs = [0 for _ in range(self.num_layers)] if self.gnn_net == 'egnn' else [0 for _ in range(self.num_layers+1)]
+        self.best_accs = [0 for _ in range(self.num_layers+1)] if self.gnn_net == 'egnn' else [0 for _ in range(self.num_layers+2)]
         self.smooth_loss = []
         self.smooth_edge_acc = []
         self.smooth_node_acc = []
+        self.smooth_avg_node_acc = []
         # load pretrained model & optimizer
         self.last_iter = 0
         if args.ckpt is not None:
@@ -182,6 +183,12 @@ class Model:
             # node
             num_qry_node = self.num_tasks*self.num_queries
             sp_label_n = sp_label.unsqueeze(1).repeat(1, self.num_queries, 1).view(self.num_tasks*self.num_queries, self.num_supports)
+            
+            sum_logit_layer = sum(logit_layers)
+            all_node_pred_layer = torch.bmm(sum_logit_layer[:,0,:,:-1], one_hot_encode(self.num_ways, sp_label_n).to(self.device)).max(-1)[1]
+            qry_node_pred_layer = all_node_pred_layer[:, -1] 
+            qry_node_acc_layer = torch.sum(torch.eq(qry_node_pred_layer, qry_label.view(-1))).float() / num_qry_node
+            
             all_node_pred_layers = [torch.bmm(logit_layer[:, 0, :, :-1],
                                               one_hot_encode(self.num_ways, sp_label_n).to(self.device)).max(-1)[1]
                                     for logit_layer in logit_layers]
@@ -189,6 +196,7 @@ class Model:
             qry_node_acc_layers = [torch.sum(torch.eq(qry_node_pred_layer,
                                                       qry_label.view(-1))).float() / num_qry_node
                                                       for qry_node_pred_layer in qry_node_pred_layers]
+
 
             # update model, last layer has more weight
             total_loss = []
@@ -210,11 +218,13 @@ class Model:
             self.smooth_loss.append(qry_edge_loss_layers)
             self.smooth_edge_acc.append(qry_edge_acc_layers)
             self.smooth_node_acc.append(qry_node_acc_layers)
+            self.smooth_avg_node_acc.append(qry_node_acc_layer)
 
             if iter % 100 == 0:
                 self.smooth_loss = torch.mean(torch.tensor(self.smooth_loss), 0)
                 self.smooth_edge_acc = torch.mean(torch.tensor(self.smooth_edge_acc), 0)
                 self.smooth_node_acc = torch.mean(torch.tensor(self.smooth_node_acc), 0)
+                self.smooth_avg_node_acc = torch.mean(torch.tensor(self.smooth_avg_node_acc))
 
                 for i, (loss, edge_acc, node_acc) in enumerate(zip(self.smooth_loss, self.smooth_edge_acc, self.smooth_node_acc)):
                     self.logger.info(' {0} th iteration, edge_loss_{4}: {1:.3f}, edge_accr_{4}: {2:.3f}, node_accr_{4}: {3:.3f}'
@@ -224,12 +234,13 @@ class Model:
                                              node_acc,
                                              i
                                              ))
-                self.logger.info(' {0} th iteration, current_lr: {1}'
-                                 .format(iter, self.optimizer.param_groups[0]['lr']))
+
+                self.logger.info(' {0} th iteration, avg_node_accr: {1:.3f}'
+                                 .format(iter, self.smooth_avg_node_acc))
                 self.smooth_loss = []
                 self.smooth_edge_acc = []
                 self.smooth_node_acc = []
-
+                self.smooth_avg_node_acc = []
             # evaluation
 
             if iter % self.val_interval == 0:
@@ -249,9 +260,10 @@ class Model:
         # set as test mode
         self.embeddingNet.eval()
         self.graphNet.eval()
-        qry_node_preds = torch.zeros(self.test_iters, self.num_layers, self.num_tasks*self.num_queries).to(self.device)
+        qry_node_preds = torch.zeros(self.test_iters, self.num_layers+1, self.num_tasks*self.num_queries).to(self.device)
         qry_labels = torch.zeros(self.test_iters, self.num_tasks*self.num_queries).to(self.device)
         qry_node_accs = []
+        avg_qry_node_accs = []
         with torch.no_grad():
             for iter in range(self.test_iters):
                 sp_data, sp_label, _, qry_data, qry_label, _ = self.test_dataloader.get_task_batch()
@@ -294,6 +306,14 @@ class Model:
                 # node
                 sp_label_n = sp_label.unsqueeze(1).repeat(1, self.num_queries, 1).view(
                                 self.num_tasks * self.num_queries, self.num_supports)
+                
+                
+                sum_logit_layer = sum(logit_layers)
+                all_node_pred_layer = torch.bmm(sum_logit_layer[:,0,:,:-1], 
+                                                one_hot_encode(self.num_ways, sp_label_n).to(self.device)
+                                                ).max(-1)[1]
+                qry_node_pred_layer = all_node_pred_layer[:, -1] 
+            
 
                 all_node_pred_layers = [torch.bmm(logit_layer[:, 0, :, :-1],
                                                    one_hot_encode(self.num_ways, sp_label_n).to(self.device)).max(-1)[1]
@@ -301,10 +321,12 @@ class Model:
 
                 for i, all_node_pred_layer in enumerate(all_node_pred_layers):
                     qry_node_preds[iter, i, :] = all_node_pred_layer[:, -1]
+                qry_node_preds[iter, -1, :] = qry_node_pred_layer
+
                 qry_labels[iter, :] = qry_label.view(-1)
 
             num_qry_node = self.num_tasks * self.num_queries * self.test_iters
-            for i in range(self.num_layers):
+            for i in range(self.num_layers+1):
                 qry_node_accs.append(torch.sum(torch.eq(qry_node_preds[:, i, :], qry_labels)).float() / num_qry_node)
 
         return qry_node_accs
