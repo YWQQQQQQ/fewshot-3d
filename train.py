@@ -26,7 +26,7 @@ class Model:
         self.gnn_net = args.gnn_net
 
         # fewshot task setting
-        self.num_layers = args.num_graph_layers if self.gnn_net == 'egnn' else args.num_graph_layers
+        self.num_layers = args.num_graph_layers if self.gnn_net == 'egnn' else args.num_graph_layers+1
         self.num_tasks = args.num_tasks
         self.num_points = args.num_points
         self.num_emb_feats = args.num_emb_feats
@@ -204,9 +204,9 @@ class Model:
                                       (pos_qry_edge_loss_layer, neg_qry_edge_loss_layer) in
                                       zip(pos_qry_edge_loss_layers, neg_qry_edge_loss_layers)]
             
-            total_loss_layers = [sp_edge_loss_layer + qry_edge_loss_layer 
-                        for sp_edge_loss_layer, qry_edge_loss_layer in zip(sp_edge_loss_layers, qry_edge_loss_layers) ]
-
+            #total_loss_layers = [sp_edge_loss_layer + qry_edge_loss_layer
+            #            for sp_edge_loss_layer, qry_edge_loss_layer in zip(sp_edge_loss_layers, qry_edge_loss_layers) ]
+            total_loss_layers = qry_edge_loss_layers
             # compute accuracy
             # edge
             num_qry_edge = torch.sum(self.qry_edge_mask*self.evaluation_mask)
