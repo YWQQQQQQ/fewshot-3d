@@ -43,13 +43,8 @@ class EdgeUpdateNetwork(nn.Module):
         num_tasks, num_samples, num_feats = node_feats.size()
         x_i = node_feats.unsqueeze(2)
         x_j = x_i.transpose(1,2)
-        #dis_i = torch.norm(x_i, p=2, dim=-1).unsqueeze(-1)
-        #dis_j = dis_i.transpose(1,2)
-        #x_ij = torch.bmm(x_i, x_j) / torch.bmm(dis_i, dis_j)
         x_ij = torch.transpose(x_i - x_j, 1, 3)
-        #print(x_ij[0])
-        #input()
-        #compute similarity/dissimilarity (batch_size x feat_size x num_samples x num_samples)
+
         for l in range(self.num_layers):
             x_ij = self._modules['conv{}'.format(l + 1)](x_ij)
             x_ij = self._modules['bn{}'.format(l + 1)](x_ij)
@@ -65,10 +60,10 @@ class EdgeUpdateNetwork(nn.Module):
         # dsim_val = 1 - sim_val
 
         diag_mask = 1.0 - torch.eye(num_samples).unsqueeze(0).unsqueeze(0).repeat(num_tasks, 2, 1, 1).to(self.device)
-        edge_feats = edge_feats * diag_mask
+        #edge_feats = edge_feats * diag_mask
         # merge_sum = torch.sum(edge_feats, -1, True)
         # set diagonal as zero and normalize
-        edge_feats = F.normalize(torch.cat([sim_val, dsim_val], 1) * edge_feats, p=1, dim=-1)
+        edge_feats = F.normalize((torch.cat([sim_val, dsim_val], 1)+edge_feats)*diag_mask, p=1, dim=-1)
         force_edge_feats = torch.cat((torch.eye(num_samples).unsqueeze(0), torch.zeros(num_samples, num_samples).unsqueeze(0)), 0).unsqueeze(0).repeat(num_tasks,1,1,1).to(self.device)
         edge_feats = edge_feats + force_edge_feats
         #for s in range(num_samples):
@@ -195,8 +190,8 @@ class GraphNetwork(nn.Module):
         edge_feat_list = []
 
         # ori_node_feats = node_feats
-        edge_feats = self._modules['node2edge_net{}'.format(0)](node_feats, edge_feats)
-        edge_feat_list.append(edge_feats)
+        # edge_feats = self._modules['node2edge_net{}'.format(0)](node_feats, edge_feats)
+        # edge_feat_list.append(edge_feats)
 
         for l in range(self.num_layers):
             # (1) edge to node

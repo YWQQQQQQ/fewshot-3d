@@ -26,7 +26,7 @@ class Model:
         self.gnn_net = args.gnn_net
 
         # fewshot task setting
-        self.num_layers = args.num_graph_layers if self.gnn_net == 'egnn' else args.num_graph_layers+1
+        self.num_layers = args.num_graph_layers if self.gnn_net == 'egnn' else args.num_graph_layers
         self.num_tasks = args.num_tasks
         self.num_points = args.num_points
         self.num_emb_feats = args.num_emb_feats
@@ -343,7 +343,7 @@ class Model:
                 # qry to itself
                 input_edge_feat[:, 0, -1, -1] = 1
                 input_edge_feat[:, 1, -1, -1] = 0
-                input_edge_feat = input_edge_feat.unsqueeze(-1).repeat(1, 1, 1, 1, self.num_emb_feats)
+                #input_edge_feat = input_edge_feat.unsqueeze(-1).repeat(1, 1, 1, 1, self.num_emb_feats)
 
                 # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
                 logit_layers = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)
@@ -404,7 +404,7 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default='train')
 
     # hyper-parameter setting
-    parser.add_argument('--lr', type=float, default='1e-4')
+    parser.add_argument('--lr', type=float, default='1e-3')
     parser.add_argument('--weight_decay', type=float, default='1e-6')
     parser.add_argument('--dec_lr', type=float, default='1000')
 
