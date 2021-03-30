@@ -6,7 +6,7 @@ from torch.autograd import Variable
 
 
 class EdgeUpdateNetwork(nn.Module):
-    def __init__(self, num_in_feats, device, ratio=[2, 1], dropout=0):
+    def __init__(self, num_in_feats, device, ratio=[0.5], dropout=0):
         super(EdgeUpdateNetwork, self).__init__()
         self.num_in_feats = num_in_feats
         self.num_feats_list = [int(num_in_feats * r) for r in ratio]
@@ -22,55 +22,62 @@ class EdgeUpdateNetwork(nn.Module):
             bn = nn.BatchNorm2d(num_features=self.num_feats_list[l])
             l_relu = nn.LeakyReLU()
 
-            self.add_module('conv{}'.format(l+1), conv)
-            self.add_module('bn{}'.format(l+1), bn)
-            self.add_module('l_relu{}'.format(l+1), l_relu)
+            self.add_module('conv{}'.format(l + 1), conv)
+            self.add_module('bn{}'.format(l + 1), bn)
+            self.add_module('l_relu{}'.format(l + 1), l_relu)
 
             if self.dropout > 0:
                 drop = nn.Dropout2d(p=self.dropout)
-                self.add_module('drop{}'.format(l+1), drop)
+                self.add_module('drop{}'.format(l + 1), drop)
 
-        #else:
-        #    conv_out = nn.Conv2d(in_channels=self.num_feats_list[-1],
-        #                         out_channels=1,
-        #                         kernel_size=1,
-        #                         bias=False)
-        #    self.add_module('conv_out', conv_out)
+        else:
+            conv_out = nn.Conv2d(in_channels=self.num_feats_list[-1],
+                                 out_channels=1,
+                                 kernel_size=1,
+                                 bias=False)
+            self.add_module('conv_out', conv_out)
 
     def forward(self, node_feats, edge_feats):
         # node_feats: num_tasks*num_queries, num_supports+1, num_features
         # compute abs(x_i, x_j)
         num_tasks, num_samples, num_feats = node_feats.size()
         x_i = node_feats.unsqueeze(2)
-        x_j = torch.transpose(x_i, 1, 2)
-        x_ij = torch.abs(x_i - x_j)
-        x_ij = torch.transpose(x_ij, 1, 3)
-
-        # compute similarity/dissimilarity (batch_size x feat_size x num_samples x num_samples)
+        x_j = x_i.transpose(1,2)
+        #dis_i = torch.norm(x_i, p=2, dim=-1).unsqueeze(-1)
+        #dis_j = dis_i.transpose(1,2)
+        #x_ij = torch.bmm(x_i, x_j) / torch.bmm(dis_i, dis_j)
+        x_ij = torch.transpose(x_i - x_j, 1, 3)
+        #print(x_ij[0])
+        #input()
+        #compute similarity/dissimilarity (batch_size x feat_size x num_samples x num_samples)
         for l in range(self.num_layers):
-            x_ij = self._modules['conv{}'.format(l+1)](x_ij)
-            x_ij = self._modules['bn{}'.format(l+1)](x_ij)
-            x_ij = self._modules['l_relu{}'.format(l+1)](x_ij)
+            x_ij = self._modules['conv{}'.format(l + 1)](x_ij)
+            x_ij = self._modules['bn{}'.format(l + 1)](x_ij)
+            x_ij = self._modules['l_relu{}'.format(l + 1)](x_ij)
             if self.dropout > 0:
-                x_ij = self._modules['drop{}'.format(l+1)](x_ij)
-        #else:
-        #    x_ij = self._modules['conv_out'](x_ij)
+                x_ij = self._modules['drop{}'.format(l + 1)](x_ij)
+        else:
+            x_ij = self._modules['conv_out'](x_ij)
 
-        dsim_val = torch.sigmoid(x_ij).unsqueeze(-1).transpose(1, 4)
+        dsim_val = torch.sigmoid(x_ij)
         sim_val = 1.0 - dsim_val
+        # sim_val = x_ij.unsqueeze(1)
+        # dsim_val = 1 - sim_val
 
-        #diag_mask = 1.0 - torch.eye(num_samples).unsqueeze(0).unsqueeze(0).repeat(num_tasks, 2, 1, 1).to(self.device)
-        #edge_feats = edge_feats * diag_mask
-        #merge_sum = torch.sum(edge_feats, -1, True)
+        diag_mask = 1.0 - torch.eye(num_samples).unsqueeze(0).unsqueeze(0).repeat(num_tasks, 2, 1, 1).to(self.device)
+        edge_feats = edge_feats * diag_mask
+        # merge_sum = torch.sum(edge_feats, -1, True)
         # set diagonal as zero and normalize
-        edge_feats = torch.cat([sim_val, dsim_val], 1) #* merge_sum
-        force_edge_feat = torch.eye(num_samples).unsqueeze(0).unsqueeze(-1).repeat(num_tasks, 1, 1, num_feats).bool()
-        edge_feats[:,0,:,:,:][force_edge_feat] = 1
-        edge_feats[:,1,:,:,:][force_edge_feat] = 0
+        edge_feats = F.normalize(torch.cat([sim_val, dsim_val], 1) * edge_feats, p=1, dim=-1)
+        force_edge_feats = torch.cat((torch.eye(num_samples).unsqueeze(0), torch.zeros(num_samples, num_samples).unsqueeze(0)), 0).unsqueeze(0).repeat(num_tasks,1,1,1).to(self.device)
+        edge_feats = edge_feats + force_edge_feats
+        #for s in range(num_samples):
+        #    edge_feats[:, 0, s, s, :] = 1
+        #    edge_feats[:, 1, s, s, :] = 0
 
         edge_feats = edge_feats + 1e-6  # Prevent division by zero
-        edge_feats = edge_feats / torch.sum(edge_feats, dim=1).unsqueeze(1).repeat(1, 2, 1, 1, 1)
-
+        edge_feats = edge_feats / torch.sum(edge_feats, dim=1).unsqueeze(1).repeat(1, 2, 1, 1)
+        #edge_feats = abs(edge_feats-1e-6)
         return edge_feats
 
 
@@ -86,7 +93,7 @@ class NodeUpdateNetwork(nn.Module):
         self.dropout = dropout
         self.num_layers = len(self.num_feats_list)
 
-        self.move_step = Variable(torch.tensor(0.3), requires_grad=True).to(self.device)
+        self.move_step = Variable(torch.tensor(0.5), requires_grad=True).to(self.device)
         # layers
         if self.edge_drop > 0:
             drop = nn.Dropout(p=self.edge_drop)
@@ -99,16 +106,16 @@ class NodeUpdateNetwork(nn.Module):
             bn = nn.BatchNorm1d(num_features=self.num_feats_list[l])
             l_relu = nn.LeakyReLU()
 
-            self.add_module('conv{}'.format(l+1), conv)
-            self.add_module('bn{}'.format(l+1), bn)
-            self.add_module('l_relu{}'.format(l+1), l_relu)
+            self.add_module('conv{}'.format(l + 1), conv)
+            self.add_module('bn{}'.format(l + 1), bn)
+            self.add_module('l_relu{}'.format(l + 1), l_relu)
 
             if self.dropout > 0:
                 drop = nn.Dropout1d(p=self.dropout)
-                self.add_module('drop{}'.format(l+1), drop)
+                self.add_module('drop{}'.format(l + 1), drop)
 
         if self.feat_drop > 0:
-            drop = nn.Dropout(p=self.feat_drop)
+            drop = nn.Dropoadd_moduleut(p=self.feat_drop)
             self.add_module('feat_drop0', drop)
 
     def forward(self, node_feats, edge_feats):
@@ -120,31 +127,32 @@ class NodeUpdateNetwork(nn.Module):
         diag_mask = 1.0 - torch.eye(num_samples).unsqueeze(0).repeat(num_batches, 1, 1).to(self.device)
         if self.edge_drop > 0:
             diag_mask = self._modules['edge_drop0'](diag_mask)
-        diag_mask = diag_mask.unsqueeze(1).unsqueeze(-1).repeat(1, 2, 1, 1, num_feats)
+        diag_mask = diag_mask.unsqueeze(1).repeat(1, 2, 1, 1)
         # set diagonal as zero and normalize
         edge_feats = edge_feats * diag_mask
-
+        #for s in range(num_samples):
+        #    edge_feats[:, :, s, s, :] = 0
         # compute attention and aggregate
-        aggr_feats = node_feats.unsqueeze(1).unsqueeze(1).repeat(1, 2, num_samples, 1, 1)
-        aggr_feats = torch.sum(edge_feats*aggr_feats, dim=2)
+        #aggr_feats = node_feats.unsqueeze(1).unsqueeze(1).repeat(1, 2, num_samples, 1, 1)
+        #aggr_feats = torch.sum(edge_feats * aggr_feats, dim=3)
 
-        #aggr_feats = torch.bmm(torch.cat(torch.split(edge_feats, 1, 1), 2).squeeze(1), node_feats)
-        #aggr_feats = torch.cat(torch.split(aggr_feats, num_samples, 1), -1)
+        aggr_feats = torch.bmm(torch.cat(torch.split(edge_feats, 1, 1), 2).squeeze(1), node_feats)
+        aggr_feats = torch.cat(torch.split(aggr_feats, num_samples, 1), -1)
         #node_feats = torch.cat([node_feats, aggr_feats], -1).transpose(1,2)
 
-        #node_feats = torch.cat([node_feats, torch.cat(aggr_feats.split(num_samples, 1), -1)], -1).transpose(1, 2)
-        node_feats = node_feats + self.move_step*(aggr_feats[:, 0, :, :,] - aggr_feats[:, 1, :, :])
-        node_feats = node_feats.transpose(1,2)
+        # node_feats = torch.cat([node_feats, torch.cat(aggr_feats.split(num_samples, 1), -1)], -1).transpose(1, 2)
+        node_feats = node_feats + self.move_step * (aggr_feats[:, :, :num_feats] - aggr_feats[:, :, num_feats:])
+        node_feats = node_feats.transpose(1, 2)
         # non-linear transform
         for l in range(self.num_layers):
-            node_feats = self._modules['conv{}'.format(l+1)](node_feats)
-            node_feats = self._modules['bn{}'.format(l+1)](node_feats)
-            node_feats = self._modules['l_relu{}'.format(l+1)](node_feats)
+            node_feats = self._modules['conv{}'.format(l + 1)](node_feats)
+            node_feats = self._modules['bn{}'.format(l + 1)](node_feats)
+            node_feats = self._modules['l_relu{}'.format(l + 1)](node_feats)
             if self.dropout > 0:
-                node_feats = self._modules['drop{}'.format(l+1)](node_feats)
+                node_feats = self._modules['drop{}'.format(l + 1)](node_feats)
 
-        #node_feats = node_feats + self.move_step * (sim_feats - dsim_feats)
-        node_feats = node_feats.transpose(1,2)
+        # node_feats = node_feats + self.move_step * (sim_feats - dsim_feats)
+        node_feats = node_feats.transpose(1, 2)
         return node_feats
 
 
@@ -164,43 +172,44 @@ class GraphNetwork(nn.Module):
         self.add_module('node2edge_net{}'.format(0), node2edge_net)
 
         for l in range(self.num_layers):
-            edge2node_net = NodeUpdateNetwork(#num_in_feats=self.num_emb_feats+self.num_node_feats if l>0 else self.num_emb_feats,
-                                              num_in_feats=self.num_node_feats if l > 0 else self.num_emb_feats,
-                                              num_node_feats=self.num_node_feats,
-                                              device=self.device,
-                                              #ratio=[2,1] if l>0 else [0.5,1],
-                                              feat_p=self.feat_p,
-                                              edge_p=self.edge_p,
-                                              dropout=0)
+            edge2node_net = NodeUpdateNetwork(
+                # num_in_feats=self.num_emb_feats+self.num_node_feats if l>0 else self.num_emb_feats,
+                num_in_feats=self.num_node_feats if l > 0 else self.num_emb_feats,
+                num_node_feats=self.num_node_feats,
+                device=self.device,
+                # ratio=[2,1] if l>0 else [0.5,1],
+                feat_p=self.feat_p,
+                edge_p=self.edge_p,
+                dropout=0)
 
-            node2edge_net = EdgeUpdateNetwork(#num_in_feats=self.num_emb_feats+self.num_node_feats,
-                                              num_in_feats=self.num_node_feats,
-                                              device=self.device,
-                                              dropout=0.3)
+            node2edge_net = EdgeUpdateNetwork(  # num_in_feats=self.num_emb_feats+self.num_node_feats,
+                num_in_feats=self.num_node_feats,
+                device=self.device,
+                dropout=0.3)
 
-            self.add_module('edge2node_net{}'.format(l+1), edge2node_net)
-            self.add_module('node2edge_net{}'.format(l+1), node2edge_net)
+            self.add_module('edge2node_net{}'.format(l + 1), edge2node_net)
+            self.add_module('node2edge_net{}'.format(l + 1), node2edge_net)
 
     def forward(self, node_feats, edge_feats):
         # for each layer
         edge_feat_list = []
 
-        #ori_node_feats = node_feats
+        # ori_node_feats = node_feats
         edge_feats = self._modules['node2edge_net{}'.format(0)](node_feats, edge_feats)
         edge_feat_list.append(edge_feats)
 
         for l in range(self.num_layers):
             # (1) edge to node
-            node_feats = self._modules['edge2node_net{}'.format(l+1)](node_feats, edge_feats)
-            #node_feats = torch.cat([ori_node_feats, node_feats], -1)
+            node_feats = self._modules['edge2node_net{}'.format(l + 1)](node_feats, edge_feats)
+            # node_feats = torch.cat([ori_node_feats, node_feats], -1)
 
             # (2) node to edge
-            edge_feats = self._modules['node2edge_net{}'.format(l+1)](node_feats, edge_feats)
-
+            edge_feats = self._modules['node2edge_net{}'.format(l + 1)](node_feats, edge_feats)
 
             edge_feat_list.append(edge_feats)
 
         return edge_feat_list
+
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
@@ -219,8 +228,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    nodes = torch.ones((4,6,64))
-    edges = torch.ones((4,2,6,6))
+    nodes = torch.ones((4, 6, 64))
+    edges = torch.ones((4, 2, 6, 6))
     gnn = GraphNetwork(args)
     result = gnn(nodes, edges)
     print(result[0].shape)

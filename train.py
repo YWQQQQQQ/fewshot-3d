@@ -13,7 +13,8 @@ from torch.nn import functional as F
 
 class Model:
     def __init__(self, args, partition='train'):
-
+        self.i = 0
+        self.j = 0
         # fundamental setting
         self.root = args.root
         self.device = args.device
@@ -78,7 +79,7 @@ class Model:
         self.train_acc = 0
         self.val_acc = 0
         self.test_acc = 0
-        self.best_accs = [0 for _ in range(self.num_layers+1)] if self.gnn_net == 'egnn' else [0 for _ in range(self.num_layers+2)]
+        self.best_accs = [0 for _ in range(self.num_layers+1)]
         self.smooth_qry_loss = []
         self.smooth_sp_loss = []
         self.smooth_edge_acc = []
@@ -148,18 +149,27 @@ class Model:
             # qry to itself
             input_edge_feat[:, 0, -1, -1] = 1
             input_edge_feat[:, 1, -1, -1] = 0
-            input_edge_feat = input_edge_feat.unsqueeze(-1).repeat(1,1,1,1,self.num_emb_feats)
+            #input_edge_feat = input_edge_feat.unsqueeze(-1).repeat(1,1,1,1,self.num_emb_feats)
 
             # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
             logit_layers = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)
-            logit_layers = [F.normalize(torch.sum(logit_layer, -1), p=1, dim=-1) for logit_layer in logit_layers]
+            #logit_layers = [torch.mean(logit_layer, -1) for logit_layer in logit_layers]
+            # self.i -= 1
+            # if self.i == -1:
+            #     print(logit_layers[0][self.j,1,:,:])
+            #     print()
+            #     print(logit_layers[-1][self.j,1,:,:])
+            #     print()
+            #     print(qry_label.view(-1)[self.j])
+            #     self.i = int(input())
+            #     self.j = (self.j+1)%5
 
-            # compute loss
+            #compute loss
             # full_edge_loss_layers: num_layers, num_tasks*num_qry, num_sp+1, num_sp+1
             full_edge_loss_layers = [self.edge_loss(logit_layer[:, 0], full_edge[:, 0]) for
                                      logit_layer in logit_layers]
             
-            sp_edge_loss_layers = [full_edge_loss_layer*self.sp_edge_mask*self.evaluation_mask 
+            sp_edge_loss_layers = [full_edge_loss_layer*self.sp_edge_mask*self.evaluation_mask
                                     for full_edge_loss_layer in full_edge_loss_layers]
             qry_edge_loss_layers = [full_edge_loss_layer*self.qry_edge_mask*self.evaluation_mask
                                     for full_edge_loss_layer in full_edge_loss_layers]
@@ -210,7 +220,7 @@ class Model:
             
             sum_logit_layer = sum(logit_layers)
             all_node_pred_layer = torch.bmm(sum_logit_layer[:,0,:,:-1], one_hot_encode(self.num_ways, sp_label_n).to(self.device)).max(-1)[1]
-            qry_node_pred_layer = all_node_pred_layer[:, -1] 
+            qry_node_pred_layer = all_node_pred_layer[:, -1]
             qry_node_acc_layer = torch.sum(torch.eq(qry_node_pred_layer, qry_label.view(-1))).float() / num_qry_node
             
             all_node_pred_layers = [torch.bmm(logit_layer[:, 0, :, :-1],
@@ -239,8 +249,8 @@ class Model:
             self.lr_scheduler.step()
 
             # logging
-            self.smooth_qry_loss.append(qry_edge_loss_layers)
-            self.smooth_sp_loss.append(sp_edge_loss_layers)
+            self.smooth_qry_loss.append(list(zip(pos_qry_edge_loss_layers, neg_qry_edge_loss_layers)))
+            self.smooth_sp_loss.append(list(zip(pos_sp_edge_loss_layers, neg_sp_edge_loss_layers)))
             self.smooth_edge_acc.append(qry_edge_acc_layers)
             self.smooth_node_acc.append(qry_node_acc_layers)
             self.smooth_avg_node_acc.append(qry_node_acc_layer)
@@ -253,10 +263,18 @@ class Model:
                 self.smooth_avg_node_acc = torch.mean(torch.tensor(self.smooth_avg_node_acc))
 
                 for i, (sp_loss, qry_loss, edge_acc, node_acc) in enumerate(zip(self.smooth_sp_loss, self.smooth_qry_loss, self.smooth_edge_acc, self.smooth_node_acc)):
-                    self.logger.info(' {0} th iteration, sp_loss_{5}: {1:.3f},edge_loss_{5}: {2:.3f}, edge_accr_{5}: {3:.3f}, node_accr_{5}: {4:.3f}'
+                    self.logger.info(' {0} th iteration, '
+                                     'pos_sp_loss_{7}: {1:.3f}, '
+                                     'neg_sp_loss_{7}: {2:.3f}, '
+                                     'pos_qry_loss_{7}: {3:.3f}, '
+                                     'neg_qry_loss_{7}: {4:.3f}, '
+                                     'edge_accr_{7}: {5:.3f}, '
+                                     'node_accr_{7}: {6:.3f}'
                                      .format(iter,
-                                             sp_loss,
-                                             qry_loss,
+                                             sp_loss[0],
+                                             sp_loss[1],
+                                             qry_loss[0],
+                                             qry_loss[1],
                                              edge_acc,
                                              node_acc,
                                              i
@@ -271,7 +289,7 @@ class Model:
                 self.smooth_avg_node_acc = []
             # evaluation
 
-            if iter % self.val_interval == 0:
+            if iter % self.val_interval == 0 and iter != 0:
                 val_accs = self.evaluate()
                 for i, val_acc in enumerate(val_accs):
                     self.best_accs[i] = max(self.best_accs[i], val_acc)
@@ -290,7 +308,6 @@ class Model:
         qry_node_preds = torch.zeros(self.test_iters, self.num_layers+1, self.num_tasks*self.num_queries).to(self.device)
         qry_labels = torch.zeros(self.test_iters, self.num_tasks*self.num_queries).to(self.device)
         qry_node_accs = []
-        avg_qry_node_accs = []
         with torch.no_grad():
             for iter in range(self.test_iters):
                 sp_data, sp_label, _, qry_data, qry_label, _ = self.test_dataloader.get_task_batch()
@@ -326,28 +343,28 @@ class Model:
                 # qry to itself
                 input_edge_feat[:, 0, -1, -1] = 1
                 input_edge_feat[:, 1, -1, -1] = 0
+                input_edge_feat = input_edge_feat.unsqueeze(-1).repeat(1, 1, 1, 1, self.num_emb_feats)
 
                 # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
                 logit_layers = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)
-                logit_layers = [F.normalize(torch.sum(logit_layer, -1), p=1, dim=-1) for logit_layer in logit_layers]
+                #logit_layers = [F.normalize(torch.sum(logit_layer, -1), p=1, dim=-1) for logit_layer in logit_layers]
 
                 # node
                 sp_label_n = sp_label.unsqueeze(1).repeat(1, self.num_queries, 1).view(
                                 self.num_tasks * self.num_queries, self.num_supports)
                 
                 
-                #print(logit_layers[0][0,0,:,:])
-                #print()
-                #print(logit_layers[-1][0,0,:,:])
-                #print()
-                #print(qry_label.view(-1)[0])
-                #input()
+                # print(logit_layers[0][0,0,:,:])
+                # print()
+                # print(logit_layers[-1][0,0,:,:])
+                # print()
+                # print(qry_label.view(-1)[0])
+                # input()
                 sum_logit_layer = sum(logit_layers)
                 all_node_pred_layer = torch.bmm(sum_logit_layer[:,0,:,:-1], 
                                                 one_hot_encode(self.num_ways, sp_label_n).to(self.device)
                                                 ).max(-1)[1]
                 qry_node_pred_layer = all_node_pred_layer[:, -1] 
-            
 
                 all_node_pred_layers = [torch.bmm(logit_layer[:, 0, :, :-1],
                                                    one_hot_encode(self.num_ways, sp_label_n).to(self.device)).max(-1)[1]
@@ -373,39 +390,39 @@ if __name__ == '__main__':
 
     # Fundamental setting
     parser.add_argument('--root', type=str, default='./')
-    parser.add_argument('--device', type=str, default='cpu')
+    parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--num_ways', type=int, default='5')
-    parser.add_argument('--num_shots', type=int, default='1')
+    parser.add_argument('--num_shots', type=int, default='5')
     parser.add_argument('--num_tasks', type=int, default='5')
     #parser.add_argument('--num_queries', type=int, default='1')
-    parser.add_argument('--seed', type=float, default='0')
-    parser.add_argument('--train_iters', type=int, default='2000')
-    parser.add_argument('--test_iters', type=int, default='20')
-    parser.add_argument('--val_interval', type=int, default='10')
+    #parser.add_argument('--seed', type=float, default='0')
+    parser.add_argument('--train_iters', type=int, default='5001')
+    parser.add_argument('--test_iters', type=int, default='200')
+    parser.add_argument('--val_interval', type=int, default='1000')
     parser.add_argument('--expr', type=str, default='experiment/')
     parser.add_argument('--ckpt', type=str, default=None)
     parser.add_argument('--mode', type=str, default='train')
 
     # hyper-parameter setting
-    parser.add_argument('--lr', type=float, default='1e-3')
+    parser.add_argument('--lr', type=float, default='1e-4')
     parser.add_argument('--weight_decay', type=float, default='1e-6')
-    parser.add_argument('--dec_lr', type=float, default='20')
+    parser.add_argument('--dec_lr', type=float, default='1000')
 
 
     # data loading setting
     parser.add_argument('--dataset_name', type=str, default='ModelNet40')
     parser.add_argument('--test_size', type=float, default='0.2')
-    parser.add_argument('--num_points', type=int, default='64')
+    parser.add_argument('--num_points', type=int, default='1024')
 
     # data transform setting
     parser.add_argument('--shift_range', type=float, default='0')
     parser.add_argument('--x_range', type=float, default='0')
     parser.add_argument('--y_range', type=float, default='0')
     parser.add_argument('--z_range', type=float, default='6.28')
-    parser.add_argument('--max_scale', type=float, default='1.1')
-    parser.add_argument('--min_scale', type=float, default='0.9')
-    parser.add_argument('--sigma', type=float, default='0.01')
-    parser.add_argument('--clip', type=float, default='0.02')
+    parser.add_argument('--max_scale', type=float, default='1')
+    parser.add_argument('--min_scale', type=float, default='1')
+    parser.add_argument('--sigma', type=float, default='0.02')
+    parser.add_argument('--clip', type=float, default='0.04')
 
     # Embedding setting
     parser.add_argument('--k', type=int, default='20')
@@ -414,10 +431,10 @@ if __name__ == '__main__':
 
     # GraphNetwork section
     parser.add_argument('--gnn_net', type=str, default='ours')
-    parser.add_argument('--num_node_feats', type=int, default='64')
+    parser.add_argument('--num_node_feats', type=int, default='128')
     parser.add_argument('--num_graph_layers', type=int, default='3')
-    parser.add_argument('--edge_p', type=float, default='0.5')
-    parser.add_argument('--feat_p', type=float, default='0.5')
+    parser.add_argument('--edge_p', type=float, default='0.3')
+    parser.add_argument('--feat_p', type=float, default='0')
 
     args = parser.parse_args()
 
