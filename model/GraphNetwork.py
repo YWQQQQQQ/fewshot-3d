@@ -42,8 +42,9 @@ class EdgeUpdateNetwork(nn.Module):
         # compute abs(x_i, x_j)
         num_tasks, num_samples, num_feats = node_feats.size()
         x_i = node_feats.unsqueeze(2)
-        x_j = x_i.transpose(1,2)
-        x_ij = torch.transpose(x_i - x_j, 1, 3)
+        x_j = torch.transpose(x_i,1,2)
+        x_ij = torch.abs(x_i - x_j)
+        x_ij = torch.transpose(x_ij, 1, 3)
 
         for l in range(self.num_layers):
             x_ij = self._modules['conv{}'.format(l + 1)](x_ij)
