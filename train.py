@@ -204,9 +204,9 @@ class Model:
                                       (pos_qry_edge_loss_layer, neg_qry_edge_loss_layer) in
                                       zip(pos_qry_edge_loss_layers, neg_qry_edge_loss_layers)]
             
-            #total_loss_layers = [sp_edge_loss_layer + qry_edge_loss_layer
-            #            for sp_edge_loss_layer, qry_edge_loss_layer in zip(sp_edge_loss_layers, qry_edge_loss_layers) ]
-            total_loss_layers = qry_edge_loss_layers
+            total_loss_layers = [sp_edge_loss_layer + qry_edge_loss_layer
+                        for sp_edge_loss_layer, qry_edge_loss_layer in zip(sp_edge_loss_layers, qry_edge_loss_layers) ]
+            #total_loss_layers = qry_edge_loss_layers
             # compute accuracy
             # edge
             num_qry_edge = torch.sum(self.qry_edge_mask*self.evaluation_mask)
