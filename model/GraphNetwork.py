@@ -42,38 +42,35 @@ class EdgeUpdateNetwork(nn.Module):
         # compute abs(x_i, x_j)
         num_tasks, num_samples, num_feats = node_feats.size()
         x_i = node_feats.unsqueeze(2)
-        x_j = torch.transpose(x_i,1,2)
+        x_j = torch.transpose(x_i, 1, 2)
         x_ij = torch.abs(x_i - x_j)
         x_ij = torch.transpose(x_ij, 1, 3)
 
+        # compute similarity/dissimilarity (batch_size x feat_size x num_samples x num_samples)
         for l in range(self.num_layers):
             x_ij = self._modules['conv{}'.format(l + 1)](x_ij)
             x_ij = self._modules['bn{}'.format(l + 1)](x_ij)
             x_ij = self._modules['l_relu{}'.format(l + 1)](x_ij)
             if self.dropout > 0:
                 x_ij = self._modules['drop{}'.format(l + 1)](x_ij)
+
         else:
             x_ij = self._modules['conv_out'](x_ij)
 
-        dsim_val = torch.sigmoid(x_ij)
-        sim_val = 1.0 - dsim_val
-        # sim_val = x_ij.unsqueeze(1)
-        # dsim_val = 1 - sim_val
+        sim_val = torch.sigmoid(x_ij)
+        dsim_val = 1.0 - sim_val
 
         diag_mask = 1.0 - torch.eye(num_samples).unsqueeze(0).unsqueeze(0).repeat(num_tasks, 2, 1, 1).to(self.device)
-        #edge_feats = edge_feats * diag_mask
-        # merge_sum = torch.sum(edge_feats, -1, True)
+        edge_feats = edge_feats * diag_mask
+        merge_sum = torch.sum(edge_feats, -1, True)
         # set diagonal as zero and normalize
-        edge_feats = F.normalize((torch.cat([sim_val, dsim_val], 1)+edge_feats)*diag_mask, p=1, dim=-1)
-        force_edge_feats = torch.cat((torch.eye(num_samples).unsqueeze(0), torch.zeros(num_samples, num_samples).unsqueeze(0)), 0).unsqueeze(0).repeat(num_tasks,1,1,1).to(self.device)
-        edge_feats = edge_feats + force_edge_feats
-        #for s in range(num_samples):
-        #    edge_feats[:, 0, s, s, :] = 1
-        #    edge_feats[:, 1, s, s, :] = 0
-
-        edge_feats = edge_feats + 1e-6  # Prevent division by zero
+        edge_feats = F.normalize(torch.cat([sim_val, dsim_val], 1) * edge_feats, p=1, dim=-1) * merge_sum
+        force_edge_feat = torch.cat((torch.eye(num_samples).unsqueeze(0),
+                                     torch.zeros(num_samples, num_samples).unsqueeze(0)), 0).unsqueeze(0).repeat(
+            num_tasks, 1, 1, 1).to(self.device)
+        edge_feats = edge_feats + force_edge_feat
+        edge_feats = edge_feats + 1e-6
         edge_feats = edge_feats / torch.sum(edge_feats, dim=1).unsqueeze(1).repeat(1, 2, 1, 1)
-        #edge_feats = abs(edge_feats-1e-6)
         return edge_feats
 
 
@@ -95,7 +92,7 @@ class NodeUpdateNetwork(nn.Module):
             drop = nn.Dropout(p=self.edge_drop)
             self.add_module('edge_drop0', drop)
         for l in range(self.num_layers):
-            conv = nn.Conv1d(in_channels=self.num_feats_list[l - 1] if l > 0 else (self.num_in_feats),
+            conv = nn.Conv1d(in_channels=self.num_feats_list[l - 1] if l > 0 else self.num_in_feats,
                              out_channels=self.num_feats_list[l],
                              kernel_size=1,
                              bias=False)
