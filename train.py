@@ -397,7 +397,7 @@ if __name__ == '__main__':
     #parser.add_argument('--num_queries', type=int, default='1')
     #parser.add_argument('--seed', type=float, default='0')
     parser.add_argument('--train_iters', type=int, default='5001')
-    parser.add_argument('--test_iters', type=int, default='200')
+    parser.add_argument('--test_iters', type=int, default='500')
     parser.add_argument('--val_interval', type=int, default='1000')
     parser.add_argument('--expr', type=str, default='experiment/')
     parser.add_argument('--ckpt', type=str, default=None)

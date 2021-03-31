@@ -107,11 +107,11 @@ class NodeUpdateNetwork(nn.Module):
             self.add_module('l_relu{}'.format(l + 1), l_relu)
 
             if self.dropout > 0:
-                drop = nn.Dropout1d(p=self.dropout)
+                drop = nn.Dropout(p=self.dropout)
                 self.add_module('drop{}'.format(l + 1), drop)
 
         if self.feat_drop > 0:
-            drop = nn.Dropoadd_moduleut(p=self.feat_drop)
+            drop = nn.Dropout(p=self.feat_drop)
             self.add_module('feat_drop0', drop)
 
     def forward(self, node_feats, edge_feats):
@@ -223,6 +223,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_graph_layers', type=int, default='3')
     parser.add_argument('--feat_p', type=float, default='0')
     parser.add_argument('--edge_p', type=float, default='0')
+    parser.add_argument('--dropout', type=float, default='0')
 
     args = parser.parse_args()
 
