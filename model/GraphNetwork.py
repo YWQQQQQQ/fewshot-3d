@@ -57,18 +57,26 @@ class EdgeUpdateNetwork(nn.Module):
         else:
             x_ij = self._modules['conv_out'](x_ij)
 
-        sim_val = torch.sigmoid(x_ij)
-        dsim_val = 1.0 - sim_val
+        dsim_val = torch.sigmoid(x_ij)
+        sim_val = 1.0 - dsim_val
 
         diag_mask = 1.0 - torch.eye(num_samples).unsqueeze(0).unsqueeze(0).repeat(num_tasks, 2, 1, 1).to(self.device)
         edge_feats = edge_feats * diag_mask
-        merge_sum = torch.sum(edge_feats, -1, True)
+        #merge_sum = torch.sum(edge_feats, -1, True)
         # set diagonal as zero and normalize
-        edge_feats = F.normalize(torch.cat([sim_val, dsim_val], 1) * edge_feats, p=1, dim=-1) * merge_sum
+        #edge_feats = F.normalize(torch.cat([sim_val, dsim_val], 1)*edge_feats, p=1, dim=-1) #* merge_sum
+        #force_edge_feat = torch.cat((torch.eye(num_samples).unsqueeze(0),
+        #                             torch.zeros(num_samples, num_samples).unsqueeze(0)), 0).unsqueeze(0).repeat(
+        #    num_tasks, 1, 1, 1).to(self.device)
+        #edge_feats = edge_feats + force_edge_feat
+
+        edge_feats = F.normalize(torch.cat([sim_val, dsim_val], 1)*edge_feats, p=1, dim=-1)  #* merge_sum
         force_edge_feat = torch.cat((torch.eye(num_samples).unsqueeze(0),
                                      torch.zeros(num_samples, num_samples).unsqueeze(0)), 0).unsqueeze(0).repeat(
             num_tasks, 1, 1, 1).to(self.device)
         edge_feats = edge_feats + force_edge_feat
+
+
         edge_feats = edge_feats + 1e-6
         edge_feats = edge_feats / torch.sum(edge_feats, dim=1).unsqueeze(1).repeat(1, 2, 1, 1)
         return edge_feats
@@ -131,7 +139,7 @@ class NodeUpdateNetwork(nn.Module):
 
         aggr_feats = torch.bmm(torch.cat(torch.split(edge_feats, 1, 1), 2).squeeze(1), node_feats)
         aggr_feats = torch.cat(torch.split(aggr_feats, num_samples, 1), -1)
-        #node_feats = torch.cat([node_feats, aggr_feats], -1).transpose(1,2)
+        #node_feats = torch.cat([node_feats, aggr_feats], -1)#.transpose(1,2)
 
         # node_feats = torch.cat([node_feats, torch.cat(aggr_feats.split(num_samples, 1), -1)], -1).transpose(1, 2)
         node_feats = node_feats + self.move_step * (aggr_feats[:, :, :num_feats] - aggr_feats[:, :, num_feats:])
@@ -172,7 +180,8 @@ class GraphNetwork(nn.Module):
                 num_in_feats=self.num_node_feats if l > 0 else self.num_emb_feats,
                 num_node_feats=self.num_node_feats,
                 device=self.device,
-                # ratio=[2,1] if l>0 else [0.5,1],
+                #ratio=[1, 1] if l > 0 else [0.5, 1],
+                ratio=[1],
                 feat_p=self.feat_p,
                 edge_p=self.edge_p,
                 dropout=self.dropout)
