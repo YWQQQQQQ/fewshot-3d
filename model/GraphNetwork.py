@@ -160,10 +160,12 @@ class GraphNetwork(nn.Module):
         self.num_layers = args.num_graph_layers
         self.edge_p = args.edge_p
         self.feat_p = args.feat_p
+        self.dropout = args.dropout
         self.device = args.device
 
         node2edge_net = EdgeUpdateNetwork(num_in_feats=self.num_emb_feats,
-                                          device=self.device)
+                                          device=self.device,
+                                          dropout=self.dropout)
 
         self.add_module('node2edge_net{}'.format(0), node2edge_net)
 
@@ -176,12 +178,12 @@ class GraphNetwork(nn.Module):
                 # ratio=[2,1] if l>0 else [0.5,1],
                 feat_p=self.feat_p,
                 edge_p=self.edge_p,
-                dropout=0)
+                dropout=self.dropout)
 
             node2edge_net = EdgeUpdateNetwork(  # num_in_feats=self.num_emb_feats+self.num_node_feats,
                 num_in_feats=self.num_node_feats,
                 device=self.device,
-                dropout=0.3)
+                dropout=self.dropout)
 
             self.add_module('edge2node_net{}'.format(l + 1), edge2node_net)
             self.add_module('node2edge_net{}'.format(l + 1), node2edge_net)

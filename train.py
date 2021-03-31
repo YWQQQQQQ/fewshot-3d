@@ -26,7 +26,7 @@ class Model:
         self.gnn_net = args.gnn_net
 
         # fewshot task setting
-        self.num_layers = args.num_graph_layers if self.gnn_net == 'egnn' else args.num_graph_layers+1
+        self.num_layers = args.num_graph_layers+1 if self.gnn_net == 'egnn' else args.num_graph_layers+1
         self.num_tasks = args.num_tasks
         self.num_points = args.num_points
         self.num_emb_feats = args.num_emb_feats
@@ -390,9 +390,9 @@ if __name__ == '__main__':
 
     # Fundamental setting
     parser.add_argument('--root', type=str, default='./')
-    parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--num_ways', type=int, default='5')
-    parser.add_argument('--num_shots', type=int, default='5')
+    parser.add_argument('--device', type=str, default='cpu')
+    parser.add_argument('--num_ways', type=int, default='2')
+    parser.add_argument('--num_shots', type=int, default='2')
     parser.add_argument('--num_tasks', type=int, default='5')
     #parser.add_argument('--num_queries', type=int, default='1')
     #parser.add_argument('--seed', type=float, default='0')
@@ -411,8 +411,8 @@ if __name__ == '__main__':
 
     # data loading setting
     parser.add_argument('--dataset_name', type=str, default='ModelNet40')
-    parser.add_argument('--test_size', type=float, default='0.2')
-    parser.add_argument('--num_points', type=int, default='1024')
+    parser.add_argument('--test_size', type=float, default='0.5')
+    parser.add_argument('--num_points', type=int, default='64')
 
     # data transform setting
     parser.add_argument('--shift_range', type=float, default='0')
@@ -430,11 +430,12 @@ if __name__ == '__main__':
     parser.add_argument('--emb_net', type=str, default='pointnet')
 
     # GraphNetwork section
-    parser.add_argument('--gnn_net', type=str, default='ours')
+    parser.add_argument('--gnn_net', type=str, default='egnn')
     parser.add_argument('--num_node_feats', type=int, default='128')
     parser.add_argument('--num_graph_layers', type=int, default='3')
     parser.add_argument('--edge_p', type=float, default='0.3')
     parser.add_argument('--feat_p', type=float, default='0')
+    parser.add_argument('--dropout', type=float, default='0')
 
     args = parser.parse_args()
 
