@@ -61,7 +61,7 @@ class EdgeUpdateNetwork(nn.Module):
         sim_val = 1.0 - dsim_val
 
         diag_mask = 1.0 - torch.eye(num_samples).unsqueeze(0).unsqueeze(0).repeat(num_tasks, 2, 1, 1).to(self.device)
-        edge_feats = edge_feats * diag_mask
+        #edge_feats = edge_feats * diag_mask
         #merge_sum = torch.sum(edge_feats, -1, True)
         # set diagonal as zero and normalize
         #edge_feats = F.normalize(torch.cat([sim_val, dsim_val], 1)*edge_feats, p=1, dim=-1) #* merge_sum
@@ -70,7 +70,7 @@ class EdgeUpdateNetwork(nn.Module):
         #    num_tasks, 1, 1, 1).to(self.device)
         #edge_feats = edge_feats + force_edge_feat
 
-        edge_feats = F.normalize(torch.cat([sim_val, dsim_val], 1)*edge_feats, p=1, dim=-1)  #* merge_sum
+        edge_feats = F.normalize((torch.cat([sim_val, dsim_val], 1)+edge_feats)*diag_mask, p=1, dim=-1)  #* merge_sum
         force_edge_feat = torch.cat((torch.eye(num_samples).unsqueeze(0),
                                      torch.zeros(num_samples, num_samples).unsqueeze(0)), 0).unsqueeze(0).repeat(
             num_tasks, 1, 1, 1).to(self.device)
@@ -94,7 +94,7 @@ class NodeUpdateNetwork(nn.Module):
         self.dropout = dropout
         self.num_layers = len(self.num_feats_list)
 
-        self.move_step = Variable(torch.tensor(0.5), requires_grad=True).to(self.device)
+        self.move_step = nn.Parameter(torch.FloatTensor([0.3])).to(self.device)
         # layers
         if self.edge_drop > 0:
             drop = nn.Dropout(p=self.edge_drop)
@@ -136,7 +136,7 @@ class NodeUpdateNetwork(nn.Module):
         # compute attention and aggregate
         #aggr_feats = node_feats.unsqueeze(1).unsqueeze(1).repeat(1, 2, num_samples, 1, 1)
         #aggr_feats = torch.sum(edge_feats * aggr_feats, dim=3)
-
+        
         aggr_feats = torch.bmm(torch.cat(torch.split(edge_feats, 1, 1), 2).squeeze(1), node_feats)
         aggr_feats = torch.cat(torch.split(aggr_feats, num_samples, 1), -1)
         #node_feats = torch.cat([node_feats, aggr_feats], -1)#.transpose(1,2)
