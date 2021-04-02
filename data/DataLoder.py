@@ -30,10 +30,10 @@ class ModelNet40Loader(Dataset):
         # Define transform methods
         if self.partition == 'train':
             self.transform = transforms.Compose([Transforms3D.List2Tensor(args),
-                                                 Transforms3D.Translation(args),
-                                                 Transforms3D.Scaling(args),
-                                                 Transforms3D.Perturbation(args),
-                                                 Transforms3D.Rotation(args)
+                                                 #Transforms3D.Translation(args),
+                                                 #Transforms3D.Scaling(args),
+                                                 #Transforms3D.Perturbation(args),
+                                                 #Transforms3D.Rotation(args)
                                                  ]
                                                 )
         else:  # 'val' or 'test' ,

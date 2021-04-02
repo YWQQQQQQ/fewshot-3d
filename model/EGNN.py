@@ -43,7 +43,6 @@ class EdgeUpdateNetwork(nn.Module):
         x_j = torch.transpose(x_i, 1, 2)
         x_ij = torch.abs(x_i - x_j)
         x_ij = torch.transpose(x_ij, 1, 3)
-
         # compute similarity/dissimilarity (batch_size x feat_size x num_samples x num_samples)
         for l in range(self.num_layers):
             x_ij = self._modules['conv{}'.format(l+1)](x_ij)
@@ -57,6 +56,8 @@ class EdgeUpdateNetwork(nn.Module):
 
         sim_val = torch.sigmoid(x_ij)
         dsim_val = 1.0 - sim_val
+
+
 
         diag_mask = 1.0 - torch.eye(num_samples).unsqueeze(0).unsqueeze(0).repeat(num_tasks, 2, 1, 1).to(self.device)
         edge_feats = edge_feats * diag_mask
@@ -156,8 +157,8 @@ class GraphNetwork(nn.Module):
         # for each layer
         edge_feat_list = []
 
-        edge_feats = self._modules['node2edge_net{}'.format(0)](node_feats, edge_feats)
-        edge_feat_list.append(edge_feats)
+        #edge_feats = self._modules['node2edge_net{}'.format(0)](node_feats, edge_feats)
+        #edge_feat_list.append(edge_feats)
 
         for l in range(self.num_layers):
             # (1) edge to node
