@@ -32,7 +32,8 @@ class Model:
         self.num_points = args.num_points
         self.num_emb_feats = args.num_emb_feats
         self.num_ways = args.num_ways
-        self.num_supports = self.num_ways * args.num_shots
+        self.num_shots = args.num_shots
+        self.num_supports = self.num_ways * self.num_shots
         self.num_queries = args.num_ways * 1
         self.num_samples = self.num_supports + 1
         self.sp_edge_mask = torch.zeros(self.num_tasks*self.num_queries, self.num_samples, self.num_samples).to(self.device)
@@ -154,7 +155,15 @@ class Model:
             input_edge_feat[:, 1, -1, -1] = 0
             #input_edge_feat = input_edge_feat.unsqueeze(-1).repeat(1,1,1,1,self.num_emb_feats)
             if self.gnn_net == 'ours':
-                input_edge_feat = input_edge_feat[:,0].unsqueeze(-1).repeat(1,1,1,self.num_emb_feats)
+                input_edge_feat = torch.zeros(self.num_tasks*self.num_queries, self.num_samples, self.num_samples).to(self.device)
+                diag_mask = -torch.eye(self.num_samples).unsqueeze(0).repeat(self.num_tasks*self.num_queries, 1, 1).to(self.device)
+                input_edge_feat += (diag_mask+full_edge[:,0]) / (self.num_shots-1)
+                input_edge_feat += -full_edge[:, 1] / (self.num_shots*(self.num_ways-1))
+                input_edge_feat[:,-1,:-1] = 1 / self.num_supports
+                input_edge_feat[:, :-1, -1] = 1 / self.num_supports
+                input_edge_feat[:, -1, -1] = 0
+                input_edge_feat = input_edge_feat.unsqueeze(-1).repeat(1, 1, 1, self.num_emb_feats)
+
             # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
             logit_layers = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)
             #logit_layers = [torch.mean(logit_layer, -1) for logit_layer in logit_layers]
@@ -341,17 +350,28 @@ class Model:
                 input_node_feat = torch.cat([sp_data, qry_data], 1)
 
                 # set the qry to others as 0.5 while keep qry to itself as 1
-                input_edge_feat = 0.5*torch.ones(self.num_tasks*self.num_queries, self.num_samples, self.num_samples, self.num_emb_feats).to(self.device)
-                #input_edge_feat = full_edge.clone()
+                #input_edge_feat = 0.5*torch.ones(self.num_tasks*self.num_queries, self.num_samples, self.num_samples, self.num_emb_feats).to(self.device)
+                input_edge_feat = full_edge.clone()
 
                 # qry to others
-                #input_edge_feat[:, :, -1, :-1] = 0.5
-                #input_edge_feat[:, :, :-1, -1] = 0.5
+                input_edge_feat[:, :, -1, :-1] = 0.5
+                input_edge_feat[:, :, :-1, -1] = 0.5
 
                 # qry to itself
-                #input_edge_feat[:, 0, -1, -1] = 1
-                #input_edge_feat[:, 1, -1, -1] = 0
-                #input_edge_feat = input_edge_feat.unsqueeze(-1).repeat(1, 1, 1, 1, self.num_emb_feats)
+                input_edge_feat[:, 0, -1, -1] = 1
+                input_edge_feat[:, 1, -1, -1] = 0
+                input_edge_feat = input_edge_feat.unsqueeze(-1).repeat(1, 1, 1, 1, self.num_emb_feats)
+                if self.gnn_net == 'ours':
+                    input_edge_feat = torch.zeros(self.num_tasks * self.num_queries, self.num_samples,
+                                                  self.num_samples).to(self.device)
+                    diag_mask = -torch.eye(self.num_samples).unsqueeze(0).repeat(self.num_tasks * self.num_queries, 1,
+                                                                                 1).to(self.device)
+                    input_edge_feat += (diag_mask + full_edge[:, 0]) / (self.num_shots - 1)
+                    input_edge_feat += -full_edge[:, 1] / (self.num_shots * (self.num_ways - 1))
+                    input_edge_feat[:, -1, :-1] = 1 / self.num_supports
+                    input_edge_feat[:, :-1, -1] = 1 / self.num_supports
+                    input_edge_feat[:, -1, -1] = 0
+                    input_edge_feat = input_edge_feat.unsqueeze(-1).repeat(1,1,1,self.num_emb_feats)
 
                 # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
                 logit_layers = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)

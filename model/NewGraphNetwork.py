@@ -129,7 +129,7 @@ class NodeUpdateNetwork(nn.Module):
 
         # Mask the node to itself connection (self-loop)
         # diag_mask: num_batch, 2, num_samples, num_samples
-        aggr_feats = torch.mean(edge_feats,2)
+        aggr_feats = torch.sum(edge_feats,2)
 
 
         #node_feats = torch.cat([node_feats, torch.cat(aggr_feats.split(num_samples, 1), -1)], -1).transpose(1, 2)
