@@ -14,4 +14,7 @@ def sim_cal(node_feats):
     x_sim = torch.div(x_ij, x_norm)
     return x_sim
 
-nn.Tanh()
+a = torch.rand(64, 3, 128)
+b = torch.min(a, -1)
+print(a.shape)
+print(b[0].shape)

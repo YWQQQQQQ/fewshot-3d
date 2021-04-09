@@ -89,9 +89,8 @@ class Rotation:
         self.z_range = args.z_range
 
     def __call__(self, pcs):
-        pc_size = pcs.size()  # num_tasks*num_samples, num_points, num_features
+        pc_size = pcs.size()  # num_tasks*num_samples, num_features, num_points
 
-        pcs_center = torch.mean(pcs, -1) 
         # Rotation matrix construction
         # x rotation
         x_rot_matrix = torch.eye(pc_size[1]).unsqueeze(0).repeat(pc_size[0],1,1).to(self.device)
@@ -124,8 +123,8 @@ class Rotation:
         rot_matrix = torch.bmm(torch.bmm(x_rot_matrix, y_rot_matrix), z_rot_matrix)
 
         pcs = torch.bmm(rot_matrix, pcs)
-        pcs_new_center = torch.mean(pcs, -1)
-        pcs += (pcs_new_center-pcs_center).unsqueeze(-1).repeat(1,1,pc_size[-1])
+        pcs_min = torch.min(pcs, -1)[0]
+        pcs -= pcs_min.unsqueeze(-1).repeat(1,1,pc_size[-1])
         # print('theta:',z_theta)
         # print('matrix:',(z_rot_matrix))
         # print('pcs0:',pcs[0,:,0])

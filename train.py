@@ -141,19 +141,20 @@ class Model:
             input_node_feat = torch.cat([sp_data, qry_data], 1)
 
             # set the qry to others as 0.5 while keep qry to itself as 1
-            input_edge_feat = 0.5 * torch.ones(self.num_tasks*self.num_queries, self.num_samples, self.num_samples, self.num_emb_feats).to(self.device)
+            #input_edge_feat = 0.5 * torch.ones(self.num_tasks*self.num_queries, self.num_samples, self.num_samples, self.num_emb_feats).to(self.device)
 
-            #input_edge_feat = full_edge.clone()
+            input_edge_feat = full_edge.clone()
 
             # qry to others
-            #input_edge_feat[:, :, -1, :-1] = 0.5
-            #input_edge_feat[:, :, :-1, -1] = 0.5
+            input_edge_feat[:, :, -1, :-1] = 0.5
+            input_edge_feat[:, :, :-1, -1] = 0.5
 
             # qry to itself
-            #input_edge_feat[:, 0, -1, -1] = 1
-            #input_edge_feat[:, 1, -1, -1] = 0
+            input_edge_feat[:, 0, -1, -1] = 1
+            input_edge_feat[:, 1, -1, -1] = 0
             #input_edge_feat = input_edge_feat.unsqueeze(-1).repeat(1,1,1,1,self.num_emb_feats)
-
+            if self.gnn_net == 'ours':
+                input_edge_feat = input_edge_feat[:,0].unsqueeze(-1).repeat(1,1,1,self.num_emb_feats)
             # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
             logit_layers = self.graphNet(node_feats=input_node_feat, edge_feats=input_edge_feat)
             #logit_layers = [torch.mean(logit_layer, -1) for logit_layer in logit_layers]
