@@ -3,7 +3,7 @@ from torch import optim
 from torch import nn
 from data import DataLoder
 from model import EmbeddingNetwork
-from model import GraphNetwork, EGNN
+from model import NewGraphNetwork, EGNN
 import argparse
 from utils import *
 import datetime
@@ -21,6 +21,7 @@ class Model:
         self.partition = partition
         self.train_iters = args.train_iters
         self.test_iters = args.test_iters
+        self.train_interval = args.train_interval
         self.val_interval = args.val_interval
         self.emb_net = args.emb_net
         self.gnn_net = args.gnn_net
@@ -64,7 +65,7 @@ class Model:
         if self.gnn_net == 'egnn':
             self.graphNet = EGNN.GraphNetwork(args).to(self.device)
         elif self.gnn_net == 'ours':
-            self.graphNet = GraphNetwork.GraphNetwork(args).to(self.device)
+            self.graphNet = NewGraphNetwork.GraphNetwork(args).to(self.device)
 
 
         # build optimizer
@@ -140,15 +141,17 @@ class Model:
             input_node_feat = torch.cat([sp_data, qry_data], 1)
 
             # set the qry to others as 0.5 while keep qry to itself as 1
-            input_edge_feat = full_edge.clone()
+            input_edge_feat = 0.5 * torch.ones(self.num_tasks*self.num_queries, self.num_samples, self.num_samples, self.num_emb_feats).to(self.device)
+
+            #input_edge_feat = full_edge.clone()
 
             # qry to others
-            input_edge_feat[:, :, -1, :-1] = 0.5
-            input_edge_feat[:, :, :-1, -1] = 0.5
+            #input_edge_feat[:, :, -1, :-1] = 0.5
+            #input_edge_feat[:, :, :-1, -1] = 0.5
 
             # qry to itself
-            input_edge_feat[:, 0, -1, -1] = 1
-            input_edge_feat[:, 1, -1, -1] = 0
+            #input_edge_feat[:, 0, -1, -1] = 1
+            #input_edge_feat[:, 1, -1, -1] = 0
             #input_edge_feat = input_edge_feat.unsqueeze(-1).repeat(1,1,1,1,self.num_emb_feats)
 
             # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
@@ -237,10 +240,10 @@ class Model:
             #total_loss.append(total_loss_layers[0].view(-1))
             #total_loss.append(total_loss_layers[-1].view(-1))
             for i, total_loss_layer in enumerate(total_loss_layers):
-                #if i < len(total_loss_layers)-1:
-                #    total_loss += [total_loss_layer.view(-1) * 0.5]
-                #else:
-                total_loss += [total_loss_layer.view(-1) * 1.0]
+                if i < len(total_loss_layers)-1:
+                    total_loss += [total_loss_layer.view(-1) * 0.5]
+                else:
+                    total_loss += [total_loss_layer.view(-1) * 1.0]
             total_loss = torch.mean(torch.cat(total_loss, 0))
 
             total_loss.backward()
@@ -255,7 +258,7 @@ class Model:
             self.smooth_node_acc.append(qry_node_acc_layers)
             self.smooth_avg_node_acc.append(qry_node_acc_layer)
 
-            if iter % 100 == 0:
+            if iter % self.train_interval == 0:
                 self.smooth_qry_loss = torch.mean(torch.tensor(self.smooth_qry_loss), 0)
                 self.smooth_sp_loss = torch.mean(torch.tensor(self.smooth_sp_loss), 0)
                 self.smooth_edge_acc = torch.mean(torch.tensor(self.smooth_edge_acc), 0)
@@ -309,6 +312,9 @@ class Model:
         qry_labels = torch.zeros(self.test_iters, self.num_tasks*self.num_queries).to(self.device)
         qry_node_accs = []
         with torch.no_grad():
+            #for name, param in self.graphNet.named_parameters():
+            #    print(name, '      ', param)
+
             for iter in range(self.test_iters):
                 sp_data, sp_label, _, qry_data, qry_label, _ = self.test_dataloader.get_task_batch()
 
@@ -334,15 +340,16 @@ class Model:
                 input_node_feat = torch.cat([sp_data, qry_data], 1)
 
                 # set the qry to others as 0.5 while keep qry to itself as 1
-                input_edge_feat = full_edge.clone()
+                input_edge_feat = 0.5*torch.ones(self.num_tasks*self.num_queries, self.num_samples, self.num_samples, self.num_emb_feats).to(self.device)
+                #input_edge_feat = full_edge.clone()
 
                 # qry to others
-                input_edge_feat[:, :, -1, :-1] = 0.5
-                input_edge_feat[:, :, :-1, -1] = 0.5
+                #input_edge_feat[:, :, -1, :-1] = 0.5
+                #input_edge_feat[:, :, :-1, -1] = 0.5
 
                 # qry to itself
-                input_edge_feat[:, 0, -1, -1] = 1
-                input_edge_feat[:, 1, -1, -1] = 0
+                #input_edge_feat[:, 0, -1, -1] = 1
+                #input_edge_feat[:, 1, -1, -1] = 0
                 #input_edge_feat = input_edge_feat.unsqueeze(-1).repeat(1, 1, 1, 1, self.num_emb_feats)
 
                 # logit_layers: num_layers, num_tasks*num_qry, 2, num_sp+1, num_sp+1
@@ -398,9 +405,12 @@ if __name__ == '__main__':
     #parser.add_argument('--seed', type=float, default='0')
     parser.add_argument('--train_iters', type=int, default='5001')
     parser.add_argument('--test_iters', type=int, default='500')
+    parser.add_argument('--train_interval', type=int, default='100')
     parser.add_argument('--val_interval', type=int, default='1000')
     parser.add_argument('--expr', type=str, default='experiment/')
+    #parser.add_argument('--ckpt', type=str, default='04-07-14-51-02')
     parser.add_argument('--ckpt', type=str, default=None)
+    #parser.add_argument('--mode', type=str, default='train')
     parser.add_argument('--mode', type=str, default='train')
 
     # hyper-parameter setting
@@ -426,15 +436,16 @@ if __name__ == '__main__':
 
     # Embedding setting
     parser.add_argument('--k', type=int, default='20')
-    parser.add_argument('--num_emb_feats', type=int, default='64')
+    parser.add_argument('--num_emb_feats', type=int, default='128')
     parser.add_argument('--emb_net', type=str, default='pointnet')
 
     # GraphNetwork section
-    parser.add_argument('--gnn_net', type=str, default='egnn')
+    parser.add_argument('--gnn_net', type=str, default='ours')
+    #parser.add_argument('--gnn_net', type=str, default='egnn')
     parser.add_argument('--num_node_feats', type=int, default='128')
     parser.add_argument('--num_graph_layers', type=int, default='3')
     parser.add_argument('--edge_p', type=float, default='0.3')
-    parser.add_argument('--feat_p', type=float, default='0')
+    parser.add_argument('--p', type=float, default='0')
     parser.add_argument('--dropout', type=float, default='0')
 
     args = parser.parse_args()
@@ -448,3 +459,4 @@ if __name__ == '__main__':
             print(val_acc)
     finally:
         logging.shutdown()
+

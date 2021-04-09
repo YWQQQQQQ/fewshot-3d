@@ -86,7 +86,7 @@ class EdgeUpdateNetwork(nn.Module):
 
 
 class NodeUpdateNetwork(nn.Module):
-    def __init__(self, num_in_feats, num_node_feats, device, ratio=[2, 1], feat_p=0, edge_p=0, dropout=0):
+    def __init__(self, num_in_feats, num_node_feats, device, ratio=[1], feat_p=0, edge_p=0, dropout=0):
         super(NodeUpdateNetwork, self).__init__()
         self.num_in_feats = num_in_feats
         self.num_node_feats = num_node_feats
@@ -97,7 +97,7 @@ class NodeUpdateNetwork(nn.Module):
         self.dropout = dropout
         self.num_layers = len(self.num_feats_list)
 
-        self.move_step = Variable(torch.tensor(0.5), requires_grad=True).to(self.device)
+        self.move_step = nn.Parameter(torch.FloatTensor([0.3])).to(self.device)
         # layers
         if self.edge_drop > 0:
             drop = nn.Dropout(p=self.edge_drop)
@@ -139,7 +139,7 @@ class NodeUpdateNetwork(nn.Module):
         # compute attention and aggregate
         #aggr_feats = node_feats.unsqueeze(1).unsqueeze(1).repeat(1, 2, num_samples, 1, 1)
         #aggr_feats = torch.sum(edge_feats * aggr_feats, dim=3)
-
+        
         aggr_feats = torch.bmm(torch.cat(torch.split(edge_feats, 1, 1), 2).squeeze(1), node_feats)
         aggr_feats = torch.cat(torch.split(aggr_feats, num_samples, 1), -1)
         #node_feats = torch.cat([node_feats, aggr_feats], -1)#.transpose(1,2)
@@ -225,7 +225,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Point Cloud Classification with Few-shot Learning')
     parser.add_argument('--dataset_root', type=str, default='../')
-    parser.add_argument('--device', type=str, default='cpu')
+    parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--num_emb_feats', type=int, default='64')
 
     parser.add_argument('--num_node_feats', type=int, default='128')

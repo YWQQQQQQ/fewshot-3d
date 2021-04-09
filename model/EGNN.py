@@ -5,12 +5,12 @@ from torch.nn import functional as F
 
 
 class EdgeUpdateNetwork(nn.Module):
-    def __init__(self, num_node_feats, device, ratio=[0.5], dropout=0):
+    def __init__(self, num_node_feats, device, ratio=[0.5], p=0):
         super(EdgeUpdateNetwork, self).__init__()
         self.num_node_feats = num_node_feats
         self.num_feats_list = [int(num_node_feats * r) for r in ratio]
         self.device = device
-        self.dropout = dropout
+        self.p = p
         self.num_layers = len(self.num_feats_list)
         # layers
         for l in range(self.num_layers):
@@ -20,13 +20,13 @@ class EdgeUpdateNetwork(nn.Module):
                              bias=False)
             bn = nn.BatchNorm2d(num_features=self.num_feats_list[l])
             l_relu = nn.LeakyReLU()
-            if self.dropout > 0:
-                drop = nn.Dropout2d(p=self.dropout)
+            if self.p > 0:
+                drop = nn.Dropout2d(p=self.p)
 
             self.add_module('conv{}'.format(l+1), conv)
             self.add_module('bn{}'.format(l+1), bn)
             self.add_module('l_relu{}'.format(l+1), l_relu)
-            if self.dropout > 0:
+            if self.p > 0:
                 self.add_module('drop{}'.format(l + 1), drop)
         else:
             conv_out = nn.Conv2d(in_channels=self.num_feats_list[-1],
@@ -48,7 +48,7 @@ class EdgeUpdateNetwork(nn.Module):
             x_ij = self._modules['conv{}'.format(l+1)](x_ij)
             x_ij = self._modules['bn{}'.format(l+1)](x_ij)
             x_ij = self._modules['l_relu{}'.format(l+1)](x_ij)
-            if self.dropout > 0:
+            if self.p > 0:
                 x_ij = self._modules['drop{}'.format(l+1)](x_ij)
 
         else:
@@ -74,13 +74,13 @@ class EdgeUpdateNetwork(nn.Module):
 
 
 class NodeUpdateNetwork(nn.Module):
-    def __init__(self, num_in_feats, num_node_feats, device, ratio=[2, 1], dropout=0):
+    def __init__(self, num_in_feats, num_node_feats, device, ratio=[2, 1], p=0):
         super(NodeUpdateNetwork, self).__init__()
         self.num_in_feats = num_in_feats
         self.num_node_feats = num_node_feats
         self.num_feats_list = [num_node_feats * r for r in ratio]
         self.device = device
-        self.dropout = dropout
+        self.p = p
         self.num_layers = len(self.num_feats_list)
         # layers
         for l in range(self.num_layers):
@@ -94,8 +94,8 @@ class NodeUpdateNetwork(nn.Module):
             self.add_module('conv{}'.format(l+1), conv)
             self.add_module('bn{}'.format(l+1), bn)
             self.add_module('l_relu{}'.format(l+1), l_relu)
-            if self.dropout > 0:
-                drop = nn.Dropout(p=self.dropout)
+            if self.p > 0:
+                drop = nn.p(p=self.p)
                 self.add_module('drop{}'.format(l + 1), drop)
 
     def forward(self, node_feats, edge_feats):
@@ -119,7 +119,7 @@ class NodeUpdateNetwork(nn.Module):
             node_feats = self._modules['conv{}'.format(l+1)](node_feats)
             node_feats = self._modules['bn{}'.format(l+1)](node_feats)
             node_feats = self._modules['l_relu{}'.format(l+1)](node_feats)
-            if self.dropout > 0:
+            if self.p > 0:
                 node_feats = self._modules['drop{}'.format(l+1)](node_feats)
         node_feats = node_feats.transpose(1, 2)
         return node_feats
@@ -131,24 +131,23 @@ class GraphNetwork(nn.Module):
         self.num_emb_feats = args.num_emb_feats
         self.num_node_feats = args.num_node_feats
         self.num_layers = args.num_graph_layers
-        self.feat_p = args.feat_p
-        self.dropout = args.dropout
+        self.p = args.p
         self.device = args.device
 
         node2edge_net = EdgeUpdateNetwork(num_node_feats=self.num_emb_feats,
                                           device=self.device,
-                                          dropout=self.dropout)
+                                          p=self.p)
         self.add_module('node2edge_net{}'.format(0), node2edge_net)
 
         for l in range(self.num_layers):
             edge2node_net = NodeUpdateNetwork(num_in_feats=self.num_node_feats if l > 0 else self.num_emb_feats,
                                               num_node_feats=self.num_node_feats,
                                               device=self.device,
-                                              dropout=self.dropout)
+                                              p=self.p)
 
             node2edge_net = EdgeUpdateNetwork(num_node_feats=self.num_node_feats,
                                               device=self.device,
-                                              dropout=self.dropout)
+                                              p=self.p)
 
             self.add_module('edge2node_net{}'.format(l+1), edge2node_net)
             self.add_module('node2edge_net{}'.format(l+1), node2edge_net)
@@ -185,7 +184,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_node_feats', type=int, default='128')
     parser.add_argument('--num_graph_layers', type=int, default='3')
     parser.add_argument('--feat_p', type=float, default='0')
-    parser.add_argument('--edge_p', type=float, default='0')
+    parser.add_argument('--p', type=float, default='0')
 
     args = parser.parse_args()
 
