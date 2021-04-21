@@ -75,9 +75,9 @@ class Model:
         self.optimizer = optim.Adam(params=module_params, lr=args.lr, weight_decay=args.weight_decay)
 
         # define losses
-        self.edge_loss = nn.BCELoss(reduction='none')
+        #self.edge_loss = nn.BCELoss(reduction='none')
         #self.node_loss = nn.CrossEntropyLoss(reduction='none')
-        #self.edge_loss = CircleLoss(m=0.25, gamma=1)
+        self.edge_loss = CircleLoss(m=0.25, gamma=0.25)
 
         # define metrics
         self.train_acc = 0
@@ -174,7 +174,7 @@ class Model:
 
             # compute loss
             # full_edge_loss_layers: num_layers, num_tasks*num_qry, num_sp+1, num_sp+1
-            '''
+
             sp_edge_loss_layers = []
             qry_edge_loss_layers = []
             for logit_layer in logit_layers:
@@ -230,7 +230,7 @@ class Model:
             
             total_loss_layers = [sp_edge_loss_layer + qry_edge_loss_layer
                         for sp_edge_loss_layer, qry_edge_loss_layer in zip(sp_edge_loss_layers, qry_edge_loss_layers) ]
-
+            '''
 
             #total_loss_layers = qry_edge_loss_layers
             # compute accuracy
