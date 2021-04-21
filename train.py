@@ -4,6 +4,7 @@ from torch import nn
 from data import DataLoder
 from model import EmbeddingNetwork
 from model import NewGraphNetwork, EGNN
+from loss.CircleLoss import CircleLoss, get_sp_sn
 import argparse
 from utils import *
 import datetime
@@ -75,7 +76,8 @@ class Model:
 
         # define losses
         self.edge_loss = nn.BCELoss(reduction='none')
-        self.node_loss = nn.CrossEntropyLoss(reduction='none')
+        #self.node_loss = nn.CrossEntropyLoss(reduction='none')
+        #self.edge_loss = CircleLoss(m=0.25, gamma=1)
 
         # define metrics
         self.train_acc = 0
@@ -170,7 +172,23 @@ class Model:
             #     self.i = int(input())
             #     self.j = (self.j+1)%5
 
-            #compute loss
+            # compute loss
+            # full_edge_loss_layers: num_layers, num_tasks*num_qry, num_sp+1, num_sp+1
+            '''
+            sp_edge_loss_layers = []
+            qry_edge_loss_layers = []
+            for logit_layer in logit_layers:
+                sp_sp, sp_sn, qry_sp, qry_sn = get_sp_sn(logit_layer[:, 0], full_edge, self.sp_edge_mask, self.qry_edge_mask)
+                sp_edge_loss_layers.append(self.edge_loss(sp_sp, sp_sn))
+                qry_edge_loss_layers.append(self.edge_loss(qry_sp, qry_sn))
+
+            total_loss_layers = [sp_edge_loss_layer + qry_edge_loss_layer
+                                 for sp_edge_loss_layer, qry_edge_loss_layer in
+                                 zip(sp_edge_loss_layers, qry_edge_loss_layers)]
+            #total_loss_layers = qry_edge_loss_layers
+            '''
+
+            # compute loss
             # full_edge_loss_layers: num_layers, num_tasks*num_qry, num_sp+1, num_sp+1
             full_edge_loss_layers = [self.edge_loss(logit_layer[:, 0], full_edge[:, 0]) for
                                      logit_layer in logit_layers]
@@ -212,6 +230,8 @@ class Model:
             
             total_loss_layers = [sp_edge_loss_layer + qry_edge_loss_layer
                         for sp_edge_loss_layer, qry_edge_loss_layer in zip(sp_edge_loss_layers, qry_edge_loss_layers) ]
+
+
             #total_loss_layers = qry_edge_loss_layers
             # compute accuracy
             # edge
@@ -255,8 +275,10 @@ class Model:
             self.lr_scheduler.step()
 
             # logging
-            self.smooth_qry_loss.append(list(zip(pos_qry_edge_loss_layers, neg_qry_edge_loss_layers)))
-            self.smooth_sp_loss.append(list(zip(pos_sp_edge_loss_layers, neg_sp_edge_loss_layers)))
+            # self.smooth_qry_loss.append(list(zip(pos_qry_edge_loss_layers, neg_qry_edge_loss_layers)))
+            # self.smooth_sp_loss.append(list(zip(pos_sp_edge_loss_layers, neg_sp_edge_loss_layers)))
+            self.smooth_qry_loss.append(qry_edge_loss_layers)
+            self.smooth_sp_loss.append(sp_edge_loss_layers)
             self.smooth_edge_acc.append(qry_edge_acc_layers)
             self.smooth_node_acc.append(qry_node_acc_layers)
             self.smooth_avg_node_acc.append(qry_node_acc_layer)
@@ -267,7 +289,21 @@ class Model:
                 self.smooth_edge_acc = torch.mean(torch.tensor(self.smooth_edge_acc), 0)
                 self.smooth_node_acc = torch.mean(torch.tensor(self.smooth_node_acc), 0)
                 self.smooth_avg_node_acc = torch.mean(torch.tensor(self.smooth_avg_node_acc))
-
+                for i, (sp_loss, qry_loss, edge_acc, node_acc) in enumerate(
+                        zip(self.smooth_sp_loss, self.smooth_qry_loss, self.smooth_edge_acc, self.smooth_node_acc)):
+                    self.logger.info(' {0} th iteration, '
+                                     'sp_loss_{5}: {1:.3f}, '
+                                     'qry_loss_{5}: {2:.3f}, '
+                                     'edge_accr_{5}: {3:.3f}, '
+                                     'node_accr_{5}: {4:.3f}'
+                                     .format(iter,
+                                             sp_loss,
+                                             qry_loss,
+                                             edge_acc,
+                                             node_acc,
+                                             i
+                                             ))
+                '''
                 for i, (sp_loss, qry_loss, edge_acc, node_acc) in enumerate(zip(self.smooth_sp_loss, self.smooth_qry_loss, self.smooth_edge_acc, self.smooth_node_acc)):
                     self.logger.info(' {0} th iteration, '
                                      'pos_sp_loss_{7}: {1:.3f}, '
@@ -285,6 +321,7 @@ class Model:
                                              node_acc,
                                              i
                                              ))
+                '''
 
                 self.logger.info(' {0} th iteration, avg_node_accr: {1:.3f}'
                                  .format(iter, self.smooth_avg_node_acc))
@@ -353,7 +390,7 @@ class Model:
                 # qry to itself
                 input_edge_feat[:, 0, -1, -1] = 1
                 input_edge_feat[:, 1, -1, -1] = 0
-                input_edge_feat = input_edge_feat.unsqueeze(-1).repeat(1, 1, 1, 1, self.num_emb_feats)
+                #input_edge_feat = input_edge_feat.unsqueeze(-1).repeat(1, 1, 1, 1, self.num_emb_feats)
                 if self.gnn_net == 'ours':
                     input_edge_feat = input_edge_feat[:,0].unsqueeze(-1).repeat(1,1,1,self.num_emb_feats)
 

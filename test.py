@@ -5,12 +5,14 @@ import os
 from torch.autograd import Variable
 from torch.nn import functional as F
 
-def sim_cal(node_feats):
-    x_i = node_feats
-    x_j = node_feats.transpose(1,2)
-    x_ij = torch.bmm(x_i, x_j)
-    x_norm = torch.norm(node_feats, p=2, dim=-1).unsqueeze(-1)
-    x_norm = torch.bmm(x_norm,x_norm.transpose(1,2))
-    x_sim = torch.div(x_ij, x_norm)
-    return x_sim
+xs = np.random.randint(low=0,high=10,size=(2,2))
+ss = np.eye(2)==1
+ss[1,0] = True
+L = []
+for x,s in zip(xs,ss):
+    L.append(x[s])
+
+print(xs)
+print(ss)
+print(L)
 
