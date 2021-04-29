@@ -77,8 +77,11 @@ class Model:
         # define losses
         #self.edge_loss = nn.BCELoss(reduction='none')
         #self.node_loss = nn.CrossEntropyLoss(reduction='none')
-        self.edge_loss = CircleLoss(m=0.25, gamma=0.25)
-
+        self.loss = args.loss
+        if self.loss == 'circle':
+            self.edge_loss = CircleLoss(m=0.25, gamma=32)
+        elif self.loss == 'bce':
+            self.edge_loss = nn.BCELoss(reduction='none')
         # define metrics
         self.train_acc = 0
         self.val_acc = 0
@@ -174,63 +177,63 @@ class Model:
 
             # compute loss
             # full_edge_loss_layers: num_layers, num_tasks*num_qry, num_sp+1, num_sp+1
+            
+            if self.loss == 'circle':
+                sp_edge_loss_layers = []
+                qry_edge_loss_layers = []
+                for logit_layer in logit_layers:
+                    sp_sp, sp_sn, qry_sp, qry_sn = get_sp_sn(logit_layer[:, 0], full_edge, self.sp_edge_mask, self.qry_edge_mask)
+                    sp_edge_loss_layers.append(self.edge_loss(sp_sp, sp_sn))
+                    qry_edge_loss_layers.append(self.edge_loss(qry_sp, qry_sn))
 
-            sp_edge_loss_layers = []
-            qry_edge_loss_layers = []
-            for logit_layer in logit_layers:
-                sp_sp, sp_sn, qry_sp, qry_sn = get_sp_sn(logit_layer[:, 0], full_edge, self.sp_edge_mask, self.qry_edge_mask)
-                sp_edge_loss_layers.append(self.edge_loss(sp_sp, sp_sn))
-                qry_edge_loss_layers.append(self.edge_loss(qry_sp, qry_sn))
-
-            total_loss_layers = [sp_edge_loss_layer + qry_edge_loss_layer
-                                 for sp_edge_loss_layer, qry_edge_loss_layer in
-                                 zip(sp_edge_loss_layers, qry_edge_loss_layers)]
+                total_loss_layers = [sp_edge_loss_layer + qry_edge_loss_layer
+                                     for sp_edge_loss_layer, qry_edge_loss_layer in
+                                     zip(sp_edge_loss_layers, qry_edge_loss_layers)]
             #total_loss_layers = qry_edge_loss_layers
-            '''
-
-            # compute loss
-            # full_edge_loss_layers: num_layers, num_tasks*num_qry, num_sp+1, num_sp+1
-            full_edge_loss_layers = [self.edge_loss(logit_layer[:, 0], full_edge[:, 0]) for
-                                     logit_layer in logit_layers]
+            elif self.loss == 'bce':
+                # compute loss
+                # full_edge_loss_layers: num_layers, num_tasks*num_qry, num_sp+1, num_sp+1
+                full_edge_loss_layers = [self.edge_loss(logit_layer[:, 0], full_edge[:, 0]) for
+                                         logit_layer in logit_layers]
             
-            sp_edge_loss_layers = [full_edge_loss_layer*self.sp_edge_mask*self.evaluation_mask
-                                    for full_edge_loss_layer in full_edge_loss_layers]
-            qry_edge_loss_layers = [full_edge_loss_layer*self.qry_edge_mask*self.evaluation_mask
-                                    for full_edge_loss_layer in full_edge_loss_layers]
+                sp_edge_loss_layers = [full_edge_loss_layer*self.sp_edge_mask*self.evaluation_mask
+                                        for full_edge_loss_layer in full_edge_loss_layers]
+                qry_edge_loss_layers = [full_edge_loss_layer*self.qry_edge_mask*self.evaluation_mask
+                                        for full_edge_loss_layer in full_edge_loss_layers]
             
-            # weighted edge loss for balancing pos/neg
-            num_pos_sp_edge = torch.sum(full_edge[:, 0]*self.sp_edge_mask*self.evaluation_mask)
-            if num_pos_sp_edge > 0:
-                pos_sp_edge_loss_layers = [torch.sum(sp_edge_loss_layer*full_edge[:, 0]) / num_pos_sp_edge
-                                          for sp_edge_loss_layer in sp_edge_loss_layers]
-            else:
-                pos_sp_edge_loss_layers = [0 for _ in range(self.num_layers)]
-            num_neg_sp_edge = torch.sum(full_edge[:, 1]*self.sp_edge_mask*self.evaluation_mask)
-            neg_sp_edge_loss_layers = [torch.sum(sp_edge_loss_layer*full_edge[:, 1]) / num_neg_sp_edge
-                                          for sp_edge_loss_layer in sp_edge_loss_layers]
+              # weighted edge loss for balancing pos/neg
+                num_pos_sp_edge = torch.sum(full_edge[:, 0]*self.sp_edge_mask*self.evaluation_mask)
+                if num_pos_sp_edge > 0:
+                    pos_sp_edge_loss_layers = [torch.sum(sp_edge_loss_layer*full_edge[:, 0]) / num_pos_sp_edge
+                                              for sp_edge_loss_layer in sp_edge_loss_layers]
+                else:
+                    pos_sp_edge_loss_layers = [0 for _ in range(self.num_layers)]
+                num_neg_sp_edge = torch.sum(full_edge[:, 1]*self.sp_edge_mask*self.evaluation_mask)
+                neg_sp_edge_loss_layers = [torch.sum(sp_edge_loss_layer*full_edge[:, 1]) / num_neg_sp_edge
+                                              for sp_edge_loss_layer in sp_edge_loss_layers]
 
-            num_pos_qry_edge = torch.sum(full_edge[:, 0]*self.qry_edge_mask*self.evaluation_mask)
-            pos_qry_edge_loss_layers = [torch.sum(qry_edge_loss_layer*full_edge[:, 0]) / num_pos_qry_edge
-                                          for qry_edge_loss_layer in qry_edge_loss_layers]
+                num_pos_qry_edge = torch.sum(full_edge[:, 0]*self.qry_edge_mask*self.evaluation_mask)
+                pos_qry_edge_loss_layers = [torch.sum(qry_edge_loss_layer*full_edge[:, 0]) / num_pos_qry_edge
+                                              for qry_edge_loss_layer in qry_edge_loss_layers]
 
-            num_neg_qry_edge = torch.sum(full_edge[:, 1]*self.qry_edge_mask*self.evaluation_mask)
-            neg_qry_edge_loss_layers = [torch.sum(qry_edge_loss_layer*full_edge[:, 1]) / num_neg_qry_edge
-                                          for qry_edge_loss_layer in qry_edge_loss_layers]
-            
-            sp_edge_loss_layers = [pos_sp_edge_loss_layer + neg_sp_edge_loss_layer for 
+                num_neg_qry_edge = torch.sum(full_edge[:, 1]*self.qry_edge_mask*self.evaluation_mask)
+                neg_qry_edge_loss_layers = [torch.sum(qry_edge_loss_layer*full_edge[:, 1]) / num_neg_qry_edge
+                                              for qry_edge_loss_layer in qry_edge_loss_layers]
+                
+                sp_edge_loss_layers = [pos_sp_edge_loss_layer + neg_sp_edge_loss_layer for 
                                     (pos_sp_edge_loss_layer, neg_sp_edge_loss_layer) in 
                                     zip(pos_sp_edge_loss_layers, neg_sp_edge_loss_layers)]
 
             # last layer is not important
-            sp_edge_loss_layers[-1] = 0
-
-            qry_edge_loss_layers = [pos_qry_edge_loss_layer + neg_qry_edge_loss_layer for
-                                      (pos_qry_edge_loss_layer, neg_qry_edge_loss_layer) in
-                                      zip(pos_qry_edge_loss_layers, neg_qry_edge_loss_layers)]
+                sp_edge_loss_layers[-1] = 0
+    
+                qry_edge_loss_layers = [pos_qry_edge_loss_layer + neg_qry_edge_loss_layer for
+                                          (pos_qry_edge_loss_layer, neg_qry_edge_loss_layer) in
+                                          zip(pos_qry_edge_loss_layers, neg_qry_edge_loss_layers)]
             
-            total_loss_layers = [sp_edge_loss_layer + qry_edge_loss_layer
-                        for sp_edge_loss_layer, qry_edge_loss_layer in zip(sp_edge_loss_layers, qry_edge_loss_layers) ]
-            '''
+                total_loss_layers = [sp_edge_loss_layer + qry_edge_loss_layer
+                            for sp_edge_loss_layer, qry_edge_loss_layer in zip(sp_edge_loss_layers, qry_edge_loss_layers) ]
+            
 
             #total_loss_layers = qry_edge_loss_layers
             # compute accuracy
@@ -489,7 +492,9 @@ if __name__ == '__main__':
     parser.add_argument('--edge_p', type=float, default='0.3')
     parser.add_argument('--p', type=float, default='0')
     parser.add_argument('--dropout', type=float, default='0')
-
+    
+    # loss setting
+    parser.add_argument('--loss', type=str, default='circle')
     args = parser.parse_args()
 
     model = Model(args, partition=args.mode)

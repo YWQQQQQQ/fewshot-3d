@@ -8,13 +8,13 @@ def knn(x, k):
     # x: num_tasks*(num_supports+num_query), num_features, num_points
     # k: num_neighborhood
 
-    xx_n = torch.bmm(x.transpose(2, 1), x)  # (xx`+ yy`+ zz`)
+    xx_n = torch.matmul(x.transpose(2, 1), x)  # (xx`+ yy`+ zz`)
     x_square = torch.sum(x ** 2, dim=1, keepdim=True)  # (x^2 + y^2 + z^2)
     x_n_square = x_square.transpose(1,2)  # (x`^2 + y`^2 + z`^2)
     inverse_distance = -(x_square - 2*xx_n + x_n_square)  # -( (x-x`)^2 + (y-y`)^2 + (z-z`)^2 )
 
-    dis, idx = inverse_distance.topk(k=k+1, dim=-1)  # (batch_size, num_points, k+1)
-    return idx[:,:,1:]
+    dis, idx = inverse_distance.topk(k=k, dim=-1)  # (batch_size, num_points, k+1)
+    return idx
 
 
 class LDGCNN(nn.Module):
@@ -25,25 +25,25 @@ class LDGCNN(nn.Module):
         self.device = args.device
         self.num_emb_feats = args.num_emb_feats
 
-        self.bn1 = nn.BatchNorm2d(64)
-        self.bn2 = nn.BatchNorm2d(64)
-        self.bn3 = nn.BatchNorm2d(128)
-        self.bn4 = nn.BatchNorm2d(256)
+        self.bn1 = nn.BatchNorm2d(32)
+        self.bn2 = nn.BatchNorm2d(32)
+        self.bn3 = nn.BatchNorm2d(64)
+        self.bn4 = nn.BatchNorm2d(128)
         self.bn5 = nn.BatchNorm1d(self.num_emb_feats)
 
-        self.conv1 = nn.Sequential(nn.Conv2d(6, 64, kernel_size=1, bias=False),
+        self.conv1 = nn.Sequential(nn.Conv2d(3, 32, kernel_size=1, bias=False),
                                    self.bn1,
                                    nn.LeakyReLU(negative_slope=0.2))
-        self.conv2 = nn.Sequential(nn.Conv2d(64*2, 64, kernel_size=1, bias=False),
+        self.conv2 = nn.Sequential(nn.Conv2d(32, 32, kernel_size=1, bias=False),
                                    self.bn2,
                                    nn.LeakyReLU(negative_slope=0.2))
-        self.conv3 = nn.Sequential(nn.Conv2d(64*2, 128, kernel_size=1, bias=False),
+        self.conv3 = nn.Sequential(nn.Conv2d(32, 64, kernel_size=1, bias=False),
                                    self.bn3,
                                    nn.LeakyReLU(negative_slope=0.2))
-        self.conv4 = nn.Sequential(nn.Conv2d(128*2, 256, kernel_size=1, bias=False),
+        self.conv4 = nn.Sequential(nn.Conv2d(64, 128, kernel_size=1, bias=False),
                                    self.bn4,
                                    nn.LeakyReLU(negative_slope=0.2))
-        self.conv5 = nn.Sequential(nn.Conv1d((64+64+128+256), self.num_emb_feats, kernel_size=1, bias=False),
+        self.conv5 = nn.Sequential(nn.Conv1d(256, self.num_emb_feats, kernel_size=1, bias=False),
                                    self.bn5,
                                    nn.LeakyReLU(negative_slope=0.2))
 
@@ -94,9 +94,10 @@ class LDGCNN(nn.Module):
         feature = x.view(num_samples * num_points, num_features)[idx, :]
         feature = feature.view(num_samples, num_points, k, num_features)
         x = x.view(num_samples, num_points, 1, num_features).repeat(1, 1, k, 1)
-
-        feature = torch.cat((feature - x, x), dim=3).permute(0, 3, 1, 2).contiguous() # num_samples, num_features, num_poinbts, num_neighbors
-
+        
+        feature[:,:,0,:] = 0
+        #feature = torch.cat((feature - x, x), dim=3).permute(0, 3, 1, 2).contiguous() # num_samples, num_features, num_poinbts, num_neighbors
+        feature = (feature - x).permute(0,3,1,2).contiguous()
         return feature
 
 
