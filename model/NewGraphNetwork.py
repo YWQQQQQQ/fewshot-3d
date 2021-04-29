@@ -24,6 +24,53 @@ def sim_cal(node_feats):
     return torch.clamp(predict,0,1)
 
 
+class CosineSimilarity(nn.Module):
+    def __init__(self, num_node_feats, ratio=[0.5,0.5]):
+        super(CosineSimilarity, self).__init__()
+        self.num_feats_list = [int(num_node_feats * r) for r in ratio]
+        self.num_layers = len(self.num_feats_list)
+
+        for l in range(self.num_layers):
+            conv = nn.Conv1d(in_channels=self.num_feats_list[l-1] if l > 0 else num_node_feats,
+                             out_channels=self.num_feats_list[l],
+                             kernel_size=1,
+                             bias=True)
+
+            bn = nn.BatchNorm1d(num_features=self.num_feats_list[l])
+            l_relu = nn.LeakyReLU()
+
+            self.add_module('conv{}'.format(l + 1), conv)
+            self.add_module('bn{}'.format(l + 1), bn)
+            self.add_module('l_relu{}'.format(l + 1), l_relu)
+        else:
+            conv = nn.Conv1d(in_channels=self.num_feats_list[-1] if self.num_layers > 0 else num_node_feats,
+                             out_channels=num_node_feats,
+                             kernel_size=1,
+                             bias=True)
+
+            self.add_module('conv{}'.format(self.num_layers+1), conv)
+
+    def forward(self, node_feats):
+        # node_feats: num_batch(num_tasks*num_qry), num_samples(num_sp+1), node_feats(num_emb_feat)
+        num_batches, num_samples, num_feats = node_feats.size()
+
+        # Mask the node to itself connection (self-loop)
+        # diag_mask: num_batch, 2, num_samples, num_samples
+        attention = node_feats.transpose(1,2)
+        # non-linear transform
+        for l in range(self.num_layers):
+            attention = self._modules['conv{}'.format(l + 1)](attention)
+            attention = self._modules['bn{}'.format(l + 1)](attention)
+            attention = self._modules['l_relu{}'.format(l + 1)](attention)
+        else:
+            attention = self._modules['conv{}'.format(self.num_layers+1)](attention)
+
+        attention = attention.transpose(1, 2)
+        node_feats = attention*node_feats
+        sim = sim_cal(node_feats)
+        return sim
+
+
 class EdgeUpdateNetwork(nn.Module):
     def __init__(self, num_node_feats, device, ratio=[1], p=0):
         super(EdgeUpdateNetwork, self).__init__()
@@ -166,6 +213,8 @@ class GraphNetwork(nn.Module):
             self.add_module('node2edge_net{}'.format(l+1), node2edge_net)
             self.add_module('edge2node_net{}'.format(l + 1), edge2node_net)
 
+        self.cossim_net = CosineSimilarity(num_node_feats=self.num_node_feats)
+
     def forward(self, node_feats, edge_feats):
         # for each layer
         edge_feat_list = []
@@ -178,7 +227,7 @@ class GraphNetwork(nn.Module):
             # (1) edge to node
             node_feats = self._modules['edge2node_net{}'.format(l+1)](node_feats, edge_feats)
 
-            edge_feat_list.append(sim_cal(node_feats))
+            edge_feat_list.append(self.cossim_net(node_feats))
 
 
         return edge_feat_list
