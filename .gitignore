@@ -2,6 +2,8 @@
 dataset/*
 .idea/*
 _pycache_/*
+data/_pycache_/*
+model/_pycache_/*
 experiment/*
 
 !dataset/.gitkeep
