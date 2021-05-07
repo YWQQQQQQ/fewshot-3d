@@ -15,6 +15,7 @@ class CosineSimilarity(nn.Module):
         self.num_ways = args.num_ways
         self.num_shots = args.num_shots
         self.num_tasks = args.num_tasks
+        self.device = args.device
         for l in range(self.num_layers-1):
             conv = nn.Conv1d(in_channels=self.num_feats_list[l-1] if l > 0 else self.num_node_feats,
                     out_channels=self.num_feats_list[l],
@@ -44,11 +45,12 @@ class CosineSimilarity(nn.Module):
 
         # Mask the node to itself connection (self-loop)
         # diag_mask: num_batch, 2, num_samples, num_samples
-        attention = node_feats.transpose(1,2)
+        attention = node_feats[:,:-1].transpose(1,2)
         for i in range(self.num_ways):
             attention[:,:,i*self.num_shots:(i+1)*self.num_shots] = torch.mean(attention[:,:,i*self.num_shots:(i+1)*self.num_shots],dim=-1,keepdim=True).repeat(1,1,self.num_shots)
 
         # non-linear transform
+        '''
         for l in range(self.num_layers-1):
             attention = self._modules['conv{}'.format(l + 1)](attention)
             attention = self._modules['bn{}'.format(l + 1)](attention)
@@ -56,8 +58,9 @@ class CosineSimilarity(nn.Module):
         else:
             attention = self._modules['conv{}'.format(self.num_layers+1)](attention)
             attention = self._modules['relu{}'.format(self.num_layers+1)](attention)
-
-        #attention = attention.transpose(1, 2)
+        '''
+        attention = attention.transpose(1, 2)
+        attention = torch.cat((attention, torch.ones(self.num_tasks*self.num_ways,1,self.num_node_feats).to(self.device)), dim=1)
         #node_feats = attention*node_feats
         predict = self.sim_cal(node_feats,attention)
         return predict
@@ -70,9 +73,9 @@ class CosineSimilarity(nn.Module):
         x_j = x_i.transpose(1,2)
         x_i = x_i.unsqueeze(-2)
         x_j = x_j.unsqueeze(-1)
-        x_ij = x_i@x_j
+        x_ij = (x_i@x_j).squeeze()
         x_norm = torch.norm(x_i, p=2, dim=-1)
-        x_norm = x_norm*(x_norm.transpose(1,2))
+        x_norm = (x_norm*(x_norm.transpose(1,2))).squeeze()
         x_sim = x_ij / x_norm
         x_sim = x_sim.unsqueeze(1)
         x_dsim = 1.0 - x_sim
