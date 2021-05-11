@@ -1,7 +1,7 @@
 import torch
 from torch import optim
 from torch import nn
-from data import DataLoder
+from data import DataLoader
 from model import EmbeddingNetwork
 from model import NewGraphNetwork, EGNN
 from loss.CircleLoss import CircleLoss, get_sp_sn
@@ -55,9 +55,9 @@ class Model:
 
         # build dataloader
         if self.partition == 'train':
-            self.train_dataloader = DataLoder.ModelNet40Loader(args, partition='train')
+            self.train_dataloader = DataLoader.DatasetLoader(args, partition='train')
 
-        self.test_dataloader = DataLoder.ModelNet40Loader(args, partition='test')
+        self.test_dataloader = DataLoader.DatasetLoader(args, partition='test')
 
         # build model
         if self.emb_net == 'ldgcnn':
@@ -442,7 +442,7 @@ if __name__ == '__main__':
 
     # Fundamental setting
     parser.add_argument('--root', type=str, default='./')
-    parser.add_argument('--device', type=str, default='cuda')
+    parser.add_argument('--device', type=str, default='cpu')
     parser.add_argument('--num_ways', type=int, default='5')
     parser.add_argument('--num_shots', type=int, default='5')
     parser.add_argument('--num_tasks', type=int, default='5')
@@ -465,7 +465,7 @@ if __name__ == '__main__':
 
 
     # data loading setting
-    parser.add_argument('--dataset_name', type=str, default='ModelNet40')
+    parser.add_argument('--dataset', type=str, default='ShapeNetCore')
     parser.add_argument('--test_size', type=float, default='0.5')
     parser.add_argument('--num_points', type=int, default='1024')
 
