@@ -10,15 +10,20 @@ import torch
 from data import Transforms3D
 
 
-class ModelNet40Loader(Dataset):
+class DatasetLoader(Dataset):
     def __init__(self, args, partition='train'):
-        super(ModelNet40Loader, self).__init__()
+        super(DatasetLoader, self).__init__()
         # Dataset basic info
 
         self.partition = partition # train, val, test
         self.num_points = args.num_points # 1024, 2048
+        self.dataset = args.dataset
+        assert self.dataset == 'ModelNet40' or self.dataset == 'ShapeNetCore', 'Dataset should be ModelNet40 or ShapeNetCore'
         self.root = args.root
-        self.num_classes = 40
+        if self.dataset == 'ModelNet40':
+           self.num_classes = 40
+        elif self.dataset == 'ShapeNetCore':
+            self.num_classes = 55
         self.test_size = args.test_size
         self.device = args.device
         self.num_ways = args.num_ways
@@ -45,16 +50,19 @@ class ModelNet40Loader(Dataset):
 
     def load_data(self):
         # Check if dataset exists. If not, download
-        dataset_to_fewshot_dataset(root=self.root, test_size=self.test_size)
+        self.dataset_to_fewshot_dataset()
 
         # dataset path
-        BASE_DIR = self.root
-        DATA_DIR = os.path.join(BASE_DIR, 'dataset')
+        BASE_DIR = os.path.join(self.root, 'dataset')
+        if self.dataset == 'ModelNet40':
+            DATA_DIR = os.path.join(BASE_DIR, 'modelnet_fewshot', '%s.h5' % self.partition)
+        elif self.dataset == 'ShapeNetCore':
+            DATA_DIR = os.path.join(BASE_DIR, 'shapenet_fewshot', '%s.h5' % self.partition)
 
         # Read dataset
         all_data = [[] for c in range(self.num_classes)]
 
-        for h5_name in glob.glob(os.path.join(DATA_DIR, 'modelnet_fewshot', '%s.h5' % self.partition)):
+        for h5_name in glob.glob(DATA_DIR):
             f = h5py.File(h5_name, 'r')
             datas = f['data'][:].astype('float32')
             labels = f['label'][:].astype('int64').squeeze()
@@ -127,6 +135,58 @@ class ModelNet40Loader(Dataset):
 
         return [new_sp_data, sp_rel_label, sp_abs_label, new_qry_data, qry_rel_label, qry_abs_label]
 
+    def dataset_to_fewshot_dataset(self, seed=0):
+        download(self.root, self.dataset)
+
+        BASE_DIR = os.path.join(self.root, 'dataset')
+        if self.dataset == 'ModelNet40':
+            SOURCE_DIR = os.path.join(BASE_DIR, 'modelnet40_ply_hdf5_2048', 'ply_data_*.h5')
+            TARGET_DIR = os.path.join(BASE_DIR, 'modelnet_fewshot')
+        elif self.dataset == 'ShapeNetCore':
+            SOURCE_DIR = os.path.join(BASE_DIR, 'shapenetcorev2_hdf5_2048', '*.h5')
+            TARGET_DIR = os.path.join(BASE_DIR, 'shapenet_fewshot')
+        if not os.path.exists(TARGET_DIR):
+            os.mkdir(TARGET_DIR)
+
+        if not os.path.exists(os.path.join(TARGET_DIR, 'train.h5')):
+            # Read dataset
+            all_data = [[] for _ in range(self.num_classes)]
+
+            for h5_name in tqdm(glob.glob(SOURCE_DIR)):
+
+                f = h5py.File(h5_name)
+                datas = f['data'][:].astype('float32')
+                labels = f['label'][:].astype('int64').squeeze()
+                f.close()
+
+                for data, label in zip(datas, labels):
+                    all_data[label].append(data)
+
+            # Split the datset set into train set (default 32 classes) and test set (default 8 classes)
+            full_class_list = [i for i in range(self.num_classes)]
+            train_class_idx, test_class_idx = train_test_split(full_class_list, test_size=self.test_size, random_state=seed)
+
+            train_data = {'data':None, 'label':None}
+            test_data = {'data':None, 'label':None}
+
+            train_data['data'] = np.concatenate([all_data[idx] for idx in train_class_idx], axis=0)
+            train_data['label'] = np.concatenate([np.repeat(idx, len(all_data[idx])) for idx in train_class_idx], axis=0)
+
+            test_data['data'] = np.concatenate([all_data[idx] for idx in test_class_idx], axis=0)
+            test_data['label'] = np.concatenate([np.repeat(idx, len(all_data[idx])) for idx in test_class_idx], axis=0)
+
+            # Create h5py file
+            train_hf = h5py.File(os.path.join(TARGET_DIR, 'train.h5'), 'w')
+            test_hf = h5py.File(os.path.join(TARGET_DIR, 'test.h5'), 'w')
+
+            train_hf.create_dataset('data', data=train_data['data'])
+            train_hf.create_dataset('label', data=train_data['label'])
+
+            test_hf.create_dataset('data', data=test_data['data'])
+            test_hf.create_dataset('label', data=test_data['label'])
+
+            train_hf.close()
+            test_hf.close()
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
@@ -137,13 +197,14 @@ if __name__ == '__main__':
     parser.add_argument('--root', type=str, default='../')
     parser.add_argument('--num_points', type=int, default='1024')
     parser.add_argument('--device', type=str, default='cpu')
+    parser.add_argument('--dataset', type=str, default='ShapeNetCore')
     parser.add_argument('--shift_range', type=float, default='1')
     parser.add_argument('--angle_range', type=float, default='6.28')
-    parser.add_argument('--max_scale', type=float, default='1,3')
+    parser.add_argument('--max_scale', type=float, default='1.3')
     parser.add_argument('--min_scale', type=float, default='0.7')
     parser.add_argument('--sigma', type=float, default='0.01')
     parser.add_argument('--clip', type=float, default='0.02')
-    parser.add_argument('--test_size', type=float, default='0.2')
+    parser.add_argument('--test_size', type=float, default='0.4')
     parser.add_argument('--num_ways', type=int, default='5')
     parser.add_argument('--num_shots', type=int, default='1')
     parser.add_argument('--num_tasks', type=int, default='5')
@@ -152,7 +213,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    dataset = ModelNet40Loader(args)
+    dataset = DatasetLoader(args)
 
     new_sp_data, sp_rel_label, sp_abs_label, new_qry_data, qry_rel_label, qry_abs_label = dataset.get_task_batch()
 
