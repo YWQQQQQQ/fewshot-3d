@@ -29,4 +29,8 @@ Download **Modelnet40** dataset (The code will download itself, manually downloa
 > python train.py --device cuda --num_ways 5 --num_shots 5 --num_tasks 5 --emb_net pointnet --gnn_net ours --loss circle --num_graph_layers 8
 
 5-way-5-shot-5-task dgcnn ours circle Loss
+<<<<<<< HEAD
 > python train.py --device cuda --num_ways 5 --num_shots 5 --num_tasks 5 --emb_net ldgcnn --gnn_net ours --loss circle
+=======
+> python train.py --device cuda --num_ways 5 --num_shots 5 --num_tasks 5 --emb_net ldgcnn --gnn_net ours --loss circle
+>>>>>>> history
