@@ -5,100 +5,23 @@ from torch.nn import functional as F
 from torch.autograd import Variable
 
 
+def sim_cal(node_feats):
+    x_i = node_feats
+    x_j = torch.transpose(node_feats, 1, 2)
+    x_ij = torch.bmm(x_i, x_j)
+    x_norm = torch.norm(node_feats, p=2, dim=-1).unsqueeze(-1)
+    x_norm = torch.bmm(x_norm,x_norm.transpose(1,2))+1e-6
+    x_sim = x_ij / x_norm
+    x_sim = x_sim.unsqueeze(1)
+    x_dsim = 1.0-x_sim
+    predict = torch.cat((x_sim, x_dsim), 1)
+    #diag_mask = (1-torch.eye(x_i.shape[1])).unsqueeze(0).unsqueeze(0).repeat(x_i.shape[0],2,1,1).cuda()
+    #predict = predict*diag_mask
+    #force_edge_feat = torch.cat((torch.eye(x_i.shape[1]).unsqueeze(0),
+    #                             torch.zeros(x_i.shape[1], x_i.shape[1]).unsqueeze(0)), 0).unsqueeze(0).repeat(x_i.shape[0],1,1,1).cuda()
+    #predict = predict + force_edge_feat
 
-class CosineSimilarity(nn.Module):
-    def __init__(self, args, ratio=[0.5,0.5]):
-        super(CosineSimilarity, self).__init__()
-        self.num_node_feats = args.num_node_feats
-        self.num_feats_list = [int(self.num_node_feats * r) for r in ratio]
-        self.num_layers = len(self.num_feats_list)+1
-        self.num_ways = args.num_ways
-        self.num_shots = args.num_shots
-        self.num_tasks = args.num_tasks
-        self.device = args.device
-        for l in range(self.num_layers-1):
-            conv = nn.Conv1d(in_channels=self.num_feats_list[l-1] if l > 0 else self.num_node_feats,
-                    out_channels=self.num_feats_list[l],
-                    kernel_size=1,
-                    bias=True)
-
-            bn = nn.BatchNorm1d(num_features=self.num_feats_list[l])
-            l_relu = nn.LeakyReLU()
-
-            self.add_module('conv{}'.format(l + 1), conv)
-            self.add_module('bn{}'.format(l + 1), bn)
-            self.add_module('l_relu{}'.format(l + 1), l_relu)
-        else:
-            conv = nn.Conv1d(in_channels=self.num_feats_list[-1] if self.num_layers > 0 else self.num_node_feats,
-                    out_channels=self.num_node_feats,
-                    kernel_size=1,
-                    bias=True)
-            
-            relu = nn.Sigmoid()
-
-            self.add_module('conv{}'.format(self.num_layers+1), conv)
-            self.add_module('relu{}'.format(self.num_layers+1), relu)
-
-    def forward(self, node_feats):
-        # node_feats: num_batch(num_tasks*num_qry), num_samples(num_sp+1), node_feats(num_emb_feat)
-        num_batches, num_samples, num_feats = node_feats.size()
-
-        # Mask the node to itself connection (self-loop)
-        # diag_mask: num_batch, 2, num_samples, num_samples
-        attention = node_feats[:,:-1].transpose(1,2)
-        for i in range(self.num_ways):
-            attention[:,:,i*self.num_shots:(i+1)*self.num_shots] = torch.mean(attention[:,:,i*self.num_shots:(i+1)*self.num_shots],dim=-1,keepdim=True).repeat(1,1,self.num_shots)
-
-        # non-linear transform
-        '''
-        for l in range(self.num_layers-1):
-            attention = self._modules['conv{}'.format(l + 1)](attention)
-            attention = self._modules['bn{}'.format(l + 1)](attention)
-            attention = self._modules['l_relu{}'.format(l + 1)](attention)
-        else:
-            attention = self._modules['conv{}'.format(self.num_layers+1)](attention)
-            attention = self._modules['relu{}'.format(self.num_layers+1)](attention)
-        '''
-        attention = attention.transpose(1, 2)
-        attention = torch.cat((attention, torch.ones(self.num_tasks*self.num_ways,1,self.num_node_feats).to(self.device)), dim=1)
-        #node_feats = attention*node_feats
-        predict = self.sim_cal(node_feats,attention)
-        return predict
-
-    def sim_cal(self, node_feats,attention):
-        a_i = attention.unsqueeze(2)
-        a_j = a_i.transpose(1,2)
-        a_ij = a_i*a_j
-        x_i = a_ij*node_feats.unsqueeze(2).repeat(1,1,self.num_ways*self.num_shots+1,1)
-        x_j = x_i.transpose(1,2)
-        x_i = x_i.unsqueeze(-2)
-        x_j = x_j.unsqueeze(-1)
-        x_ij = (x_i@x_j).squeeze()
-        x_norm = torch.norm(x_i, p=2, dim=-1)
-        x_norm = (x_norm*(x_norm.transpose(1,2))).squeeze()
-        x_sim = x_ij / x_norm
-        x_sim = x_sim.unsqueeze(1)
-        x_dsim = 1.0 - x_sim
-        predict = torch.cat((x_sim, x_dsim), 1)
-
-        '''
-        x_i = node_feats
-        x_j = torch.transpose(node_feats, 1, 2)
-        x_ij = torch.bmm(x_i, x_j)
-        x_norm = torch.norm(node_feats, p=2, dim=-1).unsqueeze(-1)
-        x_norm = torch.bmm(x_norm,x_norm.transpose(1,2))+1e-6
-        x_sim = x_ij / x_norm
-        x_sim = x_sim.unsqueeze(1)
-        x_dsim = 1.0-x_sim
-        predict = torch.cat((x_sim, x_dsim), 1)
-        '''
-        #diag_mask = (1-torch.eye(x_i.shape[1])).unsqueeze(0).unsqueeze(0).repeat(x_i.shape[0],2,1,1).cuda()
-        #predict = predict*diag_mask
-        #force_edge_feat = torch.cat((torch.eye(x_i.shape[1]).unsqueeze(0),
-        #                             torch.zeros(x_i.shape[1], x_i.shape[1]).unsqueeze(0)), 0).unsqueeze(0).repeat(x_i.shape[0],1,1,1).cuda()
-        #predict = predict + force_edge_feat
-
-        return torch.clamp(predict,0,1)
+    return torch.clamp(predict,0,1)
 
 
 class EdgeUpdateNetwork(nn.Module):
@@ -113,20 +36,12 @@ class EdgeUpdateNetwork(nn.Module):
         # layers
         for l in range(self.num_layers):
             conv = nn.Conv3d(in_channels=3,
-<<<<<<< HEAD
-                    out_channels=1,
-                    kernel_size=[1,1,1],
-                    bias=True)
-            #bn = nn.BatchNorm3d(num_features=self.num_feats_list[l])
-            l_tanh = nn.Tanh()
-=======
                              out_channels=1,
                              kernel_size=[1,1,1],
                              bias=True)
             #bn = nn.BatchNorm3d(num_features=1)
             tanh = nn.Tanh()
             #l_relu = nn.LeakyReLU()
->>>>>>> history
             if self.p > 0:
                 drop = nn.Dropout3d(p=self.p)
 
@@ -154,7 +69,7 @@ class EdgeUpdateNetwork(nn.Module):
         if self.p > 0:
             drop = nn.Dropout2d(p=self.p)
 
-
+        
         '''
     def forward(self, node_feats, edge_feats):
         # node_feats: num_tasks*num_queries, num_supports+1, num_features
@@ -296,18 +211,11 @@ class GraphNetwork(nn.Module):
             self.add_module('node2edge_net{}'.format(l+1), node2edge_net)
             self.add_module('edge2node_net{}'.format(l + 1), edge2node_net)
 
-        self.cossim_net = CosineSimilarity(args)
-
     def forward(self, node_feats, edge_feats):
         # for each layer
         edge_feat_list = []
-<<<<<<< HEAD
-
-        edge_feat_list.append(self.cossim_net(node_feats))
-=======
         #residual = node_feats
         edge_feat_list.append(sim_cal(node_feats))
->>>>>>> history
 
         for l in range(self.num_layers):
             # (2) node to edge
@@ -315,14 +223,8 @@ class GraphNetwork(nn.Module):
             # (1) edge to node
             #residual = node_feats
             node_feats = self._modules['edge2node_net{}'.format(l+1)](node_feats, edge_feats)
-<<<<<<< HEAD
-
-            edge_feat_list.append(self.cossim_net(node_feats))
-            #edge_feat_list.append(sim_cal(node_feats))
-=======
             edge_feat_list.append(sim_cal(node_feats))
             #node_feats = (node_feats+residual)/2
->>>>>>> history
 
         return edge_feat_list
 

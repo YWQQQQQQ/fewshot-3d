@@ -1,16 +1,11 @@
 # ignore dataset
 dataset/*
 .idea/*
-<<<<<<< HEAD
-_pycache_/*
-data/_pycache_/*
-model/_pycache_/*
-=======
 __pycache__/*
->>>>>>> history
-experiment/*
-model/__pycache__/*
 data/__pycache__/*
+model/__pycache__/*
+loss/__pycache__/*
+experiment/*
 
 # keep
 !dataset/.gitkeep
